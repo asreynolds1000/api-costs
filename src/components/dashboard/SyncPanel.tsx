@@ -94,7 +94,7 @@ export function SyncPanel({ statuses, providerConfigured, onManualEntry }: SyncP
                       configured ? "bg-accent-green" : "bg-muted"
                     }`}
                   />
-                  <span className="font-medium w-16">
+                  <span className="font-medium w-24 shrink-0">
                     {getProviderLabel(status.provider)}
                   </span>
                   <span className="text-muted text-xs">
