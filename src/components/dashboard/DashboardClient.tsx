@@ -15,6 +15,7 @@ import { ModelTable } from "./ModelTable";
 import { SyncPanel } from "./SyncPanel";
 import { ManualEntryForm } from "./ManualEntryForm";
 import { DateRangePicker } from "./DateRangePicker";
+import { ProviderFilter } from "./ProviderFilter";
 
 type DashboardData = {
   summary: PeriodSummaryType;
@@ -36,6 +37,7 @@ export function DashboardClient({ data }: { data: DashboardData }) {
   const [rangeDays, setRangeDays] = useState(30);
   const [filteredModels, setFilteredModels] = useState<ModelSpend[]>(data.models);
   const [syncing, setSyncing] = useState(false);
+  const [activeProvider, setActiveProvider] = useState<string | null>(null);
 
   const cutoffStr = daysAgoStr(rangeDays);
   const todayStr = new Date().toISOString().slice(0, 10);
@@ -85,8 +87,21 @@ export function DashboardClient({ data }: { data: DashboardData }) {
     fetchModels(cutoffStr, todayStr);
   }, [cutoffStr, todayStr, fetchModels]);
 
-  const filteredDaily = data.daily.filter((d) => d.date >= cutoffStr);
+  // Apply date + provider filters
+  let filteredDaily = data.daily.filter((d) => d.date >= cutoffStr);
+  if (activeProvider) {
+    filteredDaily = filteredDaily.filter((d) => d.provider === activeProvider);
+  }
   const filteredProviders = aggregateProviders(filteredDaily);
+
+  const displayModels = activeProvider
+    ? filteredModels.filter((m) => m.provider === activeProvider)
+    : filteredModels;
+
+  // Get unique providers from the data for the filter
+  const availableProviders = Array.from(
+    new Set(data.daily.map((d) => d.provider))
+  ).sort();
 
   return (
     <div className="max-w-7xl mx-auto px-4 py-6 space-y-4">
@@ -99,14 +114,21 @@ export function DashboardClient({ data }: { data: DashboardData }) {
       {/* Period Summary Cards - always relative to today */}
       <PeriodSummary data={data.summary} />
 
+      {/* Filters Row */}
+      <div className="flex items-center justify-between">
+        <ProviderFilter
+          providers={availableProviders}
+          active={activeProvider}
+          onChange={setActiveProvider}
+        />
+        <DateRangePicker activeDays={rangeDays} onChange={setRangeDays} />
+      </div>
+
       {/* Chart Row */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         {/* Spend Timeline - 3/4 width on desktop */}
         <div className="md:col-span-3 bg-card border border-card-border rounded-lg p-4">
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-sm font-medium text-muted">Daily Spend</h2>
-            <DateRangePicker activeDays={rangeDays} onChange={setRangeDays} />
-          </div>
+          <h2 className="text-sm font-medium text-muted mb-3">Daily Spend</h2>
           <div className="h-64">
             <SpendTimeline data={filteredDaily} />
           </div>
@@ -124,7 +146,7 @@ export function DashboardClient({ data }: { data: DashboardData }) {
       {/* Model Table */}
       <div className="bg-card border border-card-border rounded-lg p-4">
         <h2 className="text-sm font-medium text-muted mb-3">Top Models by Spend</h2>
-        <ModelTable data={filteredModels} />
+        <ModelTable data={displayModels} />
       </div>
 
       {/* Sync Panel */}
