@@ -146,7 +146,9 @@ export function DashboardClient({ data }: { data: DashboardData }) {
       {/* Model Table */}
       <div className="bg-card border border-card-border rounded-lg p-4">
         <h2 className="text-sm font-medium text-muted mb-3">Top Models by Spend</h2>
-        <ModelTable data={displayModels} />
+        <div className="h-72 overflow-y-auto">
+          <ModelTable data={displayModels} />
+        </div>
       </div>
 
       {/* Sync Panel */}
