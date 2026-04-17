@@ -104,7 +104,7 @@ export function DashboardClient({ data }: { data: DashboardData }) {
   ).sort();
 
   return (
-    <div className="max-w-7xl mx-auto px-4 py-6 space-y-4">
+    <div className="max-w-7xl w-full mx-auto px-4 py-6 space-y-4">
       {/* Header */}
       <div className="flex items-center gap-3">
         <h1 className="text-2xl font-semibold tracking-tight">API Cost Dashboard</h1>
@@ -127,7 +127,7 @@ export function DashboardClient({ data }: { data: DashboardData }) {
       {/* Chart Row */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         {/* Spend Timeline - 3/4 width on desktop */}
-        <div className="md:col-span-3 bg-card border border-card-border rounded-lg p-4">
+        <div className="md:col-span-3 min-w-0 bg-card border border-card-border rounded-lg p-4">
           <h2 className="text-sm font-medium text-muted mb-3">Daily Spend</h2>
           <div className="h-64">
             <SpendTimeline data={filteredDaily} />
@@ -135,7 +135,7 @@ export function DashboardClient({ data }: { data: DashboardData }) {
         </div>
 
         {/* Provider Breakdown - 1/4 width on desktop */}
-        <div className="md:col-span-1 bg-card border border-card-border rounded-lg p-4">
+        <div className="md:col-span-1 min-w-0 bg-card border border-card-border rounded-lg p-4">
           <h2 className="text-sm font-medium text-muted mb-3">By Provider</h2>
           <div className="h-64">
             <ProviderBreakdown data={filteredProviders} />
