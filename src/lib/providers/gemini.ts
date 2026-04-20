@@ -8,32 +8,35 @@ import type { ProviderAdapter, CostEntry } from "./types";
 //   3. Download the JSON key file
 //   4. Set env vars: GOOGLE_APPLICATION_CREDENTIALS, GCP_BILLING_PROJECT, GCP_BILLING_DATASET
 
-// SKU descriptions from the billing export that map to Gemini models
-const SKU_TO_MODEL: Record<string, string> = {
-  "gemini 2.5 flash online input": "gemini-2.5-flash",
-  "gemini 2.5 flash online output": "gemini-2.5-flash",
-  "gemini 2.5 flash online thinking output": "gemini-2.5-flash",
-  "gemini 2.0 flash online input": "gemini-2.0-flash",
-  "gemini 2.0 flash online output": "gemini-2.0-flash",
-  "gemini 2.5 pro online input": "gemini-2.5-pro",
-  "gemini 2.5 pro online output": "gemini-2.5-pro",
-  "gemini 2.5 pro online thinking output": "gemini-2.5-pro",
-  "gemini 3.1 pro online input": "gemini-3.1-pro-preview",
-  "gemini 3.1 pro online output": "gemini-3.1-pro-preview",
-  "gemini 3 pro image generation output": "gemini-3-pro-image-preview",
-  "gemini 3.1 flash image generation output": "gemini-3.1-flash-image-preview",
-  "gemini 2.5 flash image generation output": "gemini-2.5-flash-image",
-  "veo 3.1 standard video generation output": "veo-3.1-standard",
-  "veo 3.1 fast video generation output": "veo-3.1-fast",
-  "veo 3.1 lite video generation output": "veo-3.1-lite",
-};
+// Pattern-based model extraction from SKU descriptions.
+// Real SKU examples from BigQuery:
+//   "Gemini 3.1 Flash Image Image Output - Predictions"
+//   "Generate_content image output token count for Gemini 3 Pro Image"
+//   "Generate_content text output token count for gemini 3 pro short"
+//   "Generate content output token count Gemini 2.5 Pro short output text"
+//   "Generate content output token count gemini 2.5 flash short input text"
+//   "Veo Generation 720p with Audio"
+//   "Veo Fast Generation 1080p with Audio"
+//   "Veo Lite Generation 720p with Audio"
+const MODEL_PATTERNS: Array<[RegExp, string]> = [
+  [/gemini 3\.1 flash image/i, "gemini-3.1-flash-image"],
+  [/gemini 3 pro image/i, "gemini-3-pro-image"],
+  [/gemini 2\.5 flash native image/i, "gemini-2.5-flash-image"],
+  [/gemini 3\.1 pro/i, "gemini-3.1-pro"],
+  [/gemini 3 pro/i, "gemini-3-pro"],
+  [/gemini 2\.5 pro/i, "gemini-2.5-pro"],
+  [/gemini 2\.5 flash/i, "gemini-2.5-flash"],
+  [/gemini 2\.0 flash/i, "gemini-2.0-flash"],
+  [/veo.*lite/i, "veo-lite"],
+  [/veo.*fast/i, "veo-fast"],
+  [/veo/i, "veo-standard"],
+];
 
 function normalizeModel(skuDescription: string): string {
-  const lower = skuDescription.toLowerCase();
-  for (const [pattern, model] of Object.entries(SKU_TO_MODEL)) {
-    if (lower.includes(pattern)) return model;
+  for (const [pattern, model] of MODEL_PATTERNS) {
+    if (pattern.test(skuDescription)) return model;
   }
-  return skuDescription.replace(/Online (Input|Output|Thinking Output)/gi, "").trim().toLowerCase();
+  return skuDescription.toLowerCase().replace(/[^a-z0-9.-]+/g, "-").replace(/^-|-$/g, "");
 }
 
 function inferDirection(skuDescription: string): string {
@@ -139,9 +142,10 @@ export class GeminiAdapter implements ProviderAdapter {
         usage.unit as usage_unit
       FROM \`${table}\`
       WHERE
-        service.description = 'Generative Language API'
+        service.description IN ('Generative Language API', 'Gemini API')
         AND DATE(usage_start_time) >= @since_date
         AND cost > 0
+        AND sku.description NOT LIKE '%Tax%'
       GROUP BY
         usage_date, sku_description, usage_unit
       ORDER BY
