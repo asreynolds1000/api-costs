@@ -13,7 +13,6 @@ export function SyncBar({ statuses, providerConfigured }: SyncBarProps) {
   const [syncing, setSyncing] = useState(false);
   const [result, setResult] = useState("");
 
-  // Find the most recent sync across all providers
   const lastSyncTimes = statuses
     .filter((s) => s.lastSync)
     .map((s) => new Date(s.lastSync!).getTime());
@@ -56,27 +55,22 @@ export function SyncBar({ statuses, providerConfigured }: SyncBarProps) {
   }
 
   return (
-    <div className="flex items-center justify-between text-xs">
-      <div className="flex items-center gap-2">
-        <span
-          className={`w-1.5 h-1.5 rounded-full ${isFresh ? "bg-accent-green" : "bg-amber-500"}`}
-        />
-        <span className="text-muted">
-          {syncing
-            ? "Syncing..."
-            : result
-              ? result
-              : `Last sync: ${lastSyncStr}`}
-        </span>
-      </div>
+    <div className="flex items-center gap-3 text-xs">
+      <span className={isFresh ? "text-muted" : "text-amber-500"}>
+        {syncing
+          ? "Syncing..."
+          : result
+            ? result
+            : `Last sync: ${lastSyncStr}`}
+      </span>
       <button
         onClick={handleSync}
         disabled={syncing}
-        className={`px-2.5 py-1 rounded transition-colors ${
+        className={`px-3 py-1 rounded font-medium transition-colors disabled:opacity-50 ${
           isFresh
             ? "text-muted hover:text-foreground hover:bg-card-border/30"
             : "text-amber-500 bg-amber-500/10 hover:bg-amber-500/20"
-        } disabled:opacity-50`}
+        }`}
       >
         {syncing ? "Syncing..." : isFresh ? "Sync" : "Sync Now"}
       </button>

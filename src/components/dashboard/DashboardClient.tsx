@@ -78,15 +78,7 @@ export function DashboardClient({ data }: { data: DashboardData }) {
     <div className="max-w-7xl w-full mx-auto px-4 py-6 space-y-4">
       {/* Header + Sync */}
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <h1 className="text-2xl font-semibold tracking-tight">API Cost Dashboard</h1>
-          <button
-            onClick={() => setShowManualEntry(true)}
-            className="text-xs px-2.5 py-1 text-muted hover:text-foreground hover:bg-card-border/30 rounded transition-colors"
-          >
-            + Add Entry
-          </button>
-        </div>
+        <h1 className="text-2xl font-semibold tracking-tight">API Cost Dashboard</h1>
         <SyncBar
           statuses={data.syncStatuses}
           providerConfigured={data.providerConfigured}
