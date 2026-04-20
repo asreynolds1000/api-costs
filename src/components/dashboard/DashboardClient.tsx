@@ -12,10 +12,10 @@ import { PeriodSummary } from "./PeriodSummary";
 import { SpendTimeline } from "./SpendTimeline";
 import { ProviderBreakdown } from "./ProviderBreakdown";
 import { ModelTable } from "./ModelTable";
-import { SyncPanel } from "./SyncPanel";
 import { ManualEntryForm } from "./ManualEntryForm";
 import { DateRangePicker } from "./DateRangePicker";
 import { ProviderFilter } from "./ProviderFilter";
+import { SyncBar } from "./SyncBar";
 
 type DashboardData = {
   summary: PeriodSummaryType;
@@ -36,39 +36,10 @@ export function DashboardClient({ data }: { data: DashboardData }) {
   const [showManualEntry, setShowManualEntry] = useState(false);
   const [rangeDays, setRangeDays] = useState(30);
   const [filteredModels, setFilteredModels] = useState<ModelSpend[]>(data.models);
-  const [syncing, setSyncing] = useState(false);
   const [activeProvider, setActiveProvider] = useState<string | null>(null);
 
   const cutoffStr = daysAgoStr(rangeDays);
   const todayStr = new Date().toISOString().slice(0, 10);
-
-  // Sync all configured providers on page load (max once per hour)
-  useEffect(() => {
-    const SYNC_INTERVAL_MS = 60 * 60 * 1000; // 1 hour
-    const lastSync = localStorage.getItem("api-costs-last-sync");
-    const now = Date.now();
-
-    if (lastSync && now - Number(lastSync) < SYNC_INTERVAL_MS) return;
-
-    const configured = Object.entries(data.providerConfigured)
-      .filter(([, v]) => v)
-      .map(([k]) => k);
-
-    if (configured.length === 0) return;
-
-    localStorage.setItem("api-costs-last-sync", String(now));
-    setSyncing(true);
-
-    Promise.all(
-      configured.map((p) =>
-        fetch(`/api/sync/${p}`, { method: "POST" }).catch(() => null)
-      )
-    ).then(() => {
-      setSyncing(false);
-      window.location.reload();
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   // Fetch model data for the selected range
   const fetchModels = useCallback(async (start: string, end: string) => {
@@ -105,10 +76,21 @@ export function DashboardClient({ data }: { data: DashboardData }) {
 
   return (
     <div className="max-w-7xl w-full mx-auto px-4 py-6 space-y-4">
-      {/* Header */}
-      <div className="flex items-center gap-3">
-        <h1 className="text-2xl font-semibold tracking-tight">API Cost Dashboard</h1>
-        {syncing && <span className="text-xs text-muted animate-pulse">Syncing...</span>}
+      {/* Header + Sync */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-4">
+          <h1 className="text-2xl font-semibold tracking-tight">API Cost Dashboard</h1>
+          <button
+            onClick={() => setShowManualEntry(true)}
+            className="text-xs px-2.5 py-1 text-muted hover:text-foreground hover:bg-card-border/30 rounded transition-colors"
+          >
+            + Add Entry
+          </button>
+        </div>
+        <SyncBar
+          statuses={data.syncStatuses}
+          providerConfigured={data.providerConfigured}
+        />
       </div>
 
       {/* Period Summary Cards - always relative to today */}
@@ -126,7 +108,6 @@ export function DashboardClient({ data }: { data: DashboardData }) {
 
       {/* Chart Row */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        {/* Spend Timeline - 3/4 width on desktop */}
         <div className="md:col-span-3 min-w-0 bg-card border border-card-border rounded-lg p-4">
           <h2 className="text-sm font-medium text-muted mb-3">Daily Spend</h2>
           <div className="h-64">
@@ -134,7 +115,6 @@ export function DashboardClient({ data }: { data: DashboardData }) {
           </div>
         </div>
 
-        {/* Provider Breakdown - 1/4 width on desktop */}
         <div className="md:col-span-1 min-w-0 bg-card border border-card-border rounded-lg p-4">
           <h2 className="text-sm font-medium text-muted mb-3">By Provider</h2>
           <div className="h-64">
@@ -151,13 +131,6 @@ export function DashboardClient({ data }: { data: DashboardData }) {
         </div>
       </div>
 
-      {/* Sync Panel */}
-      <SyncPanel
-        statuses={data.syncStatuses}
-        providerConfigured={data.providerConfigured}
-        onManualEntry={() => setShowManualEntry(true)}
-      />
-
       {/* Manual Entry Modal */}
       {showManualEntry && (
         <ManualEntryForm onClose={() => setShowManualEntry(false)} />
@@ -166,7 +139,6 @@ export function DashboardClient({ data }: { data: DashboardData }) {
   );
 }
 
-// Re-aggregate providers from filtered daily data
 function aggregateProviders(daily: DailySpend[]): ProviderSpend[] {
   const map = new Map<string, number>();
   for (const d of daily) {
