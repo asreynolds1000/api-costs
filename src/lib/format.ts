@@ -30,7 +30,11 @@ export const PROVIDER_CONFIG: Record<string, { label: string; color: string }> =
   xai: { label: "xAI", color: "var(--provider-xai)" },
   gemini: { label: "Gemini", color: "var(--provider-gemini)" },
   openrouter: { label: "OpenRouter", color: "var(--provider-openrouter)" },
+  bfl: { label: "BFL (Flux)", color: "var(--provider-bfl, #7c3aed)" },
+  fal: { label: "FAL", color: "var(--provider-fal, #ec4899)" },
 };
+
+export const PROVIDER_NAMES = Object.keys(PROVIDER_CONFIG);
 
 export function getProviderLabel(provider: string): string {
   return PROVIDER_CONFIG[provider]?.label ?? provider;

@@ -1,4 +1,5 @@
 import type { ProviderAdapter, CostEntry } from "./types";
+import { toEasternDate } from "../timezone";
 
 // Parse OpenAI line_item strings like "gpt-4o, input" or "Image models"
 function parseLineItem(lineItem: string): { model: string; direction: string; unitType: string } {
@@ -103,7 +104,7 @@ export class OpenAIAdapter implements ProviderAdapter {
       const data: OpenAICostResponse = await res.json();
 
       for (const bucket of data.data) {
-        const date = new Date(bucket.start_time * 1000).toISOString().slice(0, 10);
+        const date = toEasternDate(new Date(bucket.start_time * 1000));
 
         for (const result of bucket.results) {
           const costVal = Number(result.amount?.value ?? 0);

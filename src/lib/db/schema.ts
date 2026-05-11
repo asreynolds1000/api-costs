@@ -1,4 +1,4 @@
-import { sqliteTable, text, integer, real, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { sqliteTable, text, integer, real, uniqueIndex, index } from "drizzle-orm/sqlite-core";
 
 export const costEntries = sqliteTable(
   "cost_entries",
@@ -26,6 +26,10 @@ export const costEntries = sqliteTable(
       table.direction,
       table.rawLineItem,
       table.source
+    ),
+    index("cost_entries_provider_synced").on(
+      table.provider,
+      table.syncedAt
     ),
   ]
 );

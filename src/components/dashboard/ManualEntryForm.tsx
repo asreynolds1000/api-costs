@@ -38,7 +38,7 @@ export function ManualEntryForm({ onClose }: ManualEntryFormProps) {
   const [provider, setProvider] = useState("gemini");
   const [model, setModel] = useState("");
   const [customModel, setCustomModel] = useState("");
-  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
+  const [date, setDate] = useState(new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York" }).format(new Date()));
   const [costUsd, setCostUsd] = useState("");
   const [tokensIn, setTokensIn] = useState("");
   const [tokensOut, setTokensOut] = useState("");
@@ -130,7 +130,7 @@ export function ManualEntryForm({ onClose }: ManualEntryFormProps) {
   }
 
   const models = MODELS_BY_PROVIDER[provider] ?? [];
-  const today = new Date().toISOString().slice(0, 10);
+  const today = new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York" }).format(new Date());
 
   return (
     <div

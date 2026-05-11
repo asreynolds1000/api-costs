@@ -1,51 +1,46 @@
 import { sql, eq, and, gte, lte, desc } from "drizzle-orm";
 import { db } from "./index";
 import { costEntries, syncLog } from "./schema";
+import { toEasternDate } from "../timezone";
+import { PROVIDER_NAMES } from "../format";
 
-// Period boundaries relative to now
-function startOfDay(): string {
+function todayET(): string {
+  return toEasternDate(new Date());
+}
+
+function offsetET(days: number): string {
   const d = new Date();
-  d.setHours(0, 0, 0, 0);
-  return d.toISOString().slice(0, 10);
+  d.setDate(d.getDate() + days);
+  return toEasternDate(d);
+}
+
+function startOfDay(): string {
+  return todayET();
+}
+
+function startOfYesterday(): string {
+  return offsetET(-1);
 }
 
 function startOfWeek(): string {
-  const d = new Date();
-  d.setDate(d.getDate() - d.getDay());
-  d.setHours(0, 0, 0, 0);
-  return d.toISOString().slice(0, 10);
+  const long = new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", weekday: "long" }).format(new Date());
+  const dayOfWeek = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"].indexOf(long);
+  return offsetET(-dayOfWeek);
 }
 
 function startOfMonth(): string {
-  const d = new Date();
-  d.setDate(1);
-  d.setHours(0, 0, 0, 0);
-  return d.toISOString().slice(0, 10);
+  const today = todayET();
+  return today.slice(0, 8) + "01";
 }
 
 function startOfYear(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-01-01`;
-}
-
-// Sum cost for a date range
-function sumCostSince(since: string) {
-  return db
-    .select({ total: sql<number>`COALESCE(SUM(${costEntries.costUsd}), 0)` })
-    .from(costEntries)
-    .where(gte(costEntries.date, since))
-    .get()!.total;
-}
-
-function sumCostAll() {
-  return db
-    .select({ total: sql<number>`COALESCE(SUM(${costEntries.costUsd}), 0)` })
-    .from(costEntries)
-    .get()!.total;
+  const today = todayET();
+  return today.slice(0, 5) + "01-01";
 }
 
 export type PeriodSummary = {
   today: number;
+  yesterday: number;
   thisWeek: number;
   thisMonth: number;
   thisYear: number;
@@ -53,13 +48,25 @@ export type PeriodSummary = {
 };
 
 export function getPeriodSummary(): PeriodSummary {
-  return {
-    today: sumCostSince(startOfDay()),
-    thisWeek: sumCostSince(startOfWeek()),
-    thisMonth: sumCostSince(startOfMonth()),
-    thisYear: sumCostSince(startOfYear()),
-    allTime: sumCostAll(),
-  };
+  const today = startOfDay();
+  const yesterday = startOfYesterday();
+  const week = startOfWeek();
+  const month = startOfMonth();
+  const year = startOfYear();
+
+  const row = db
+    .select({
+      today: sql<number>`COALESCE(SUM(CASE WHEN ${costEntries.date} >= ${today} THEN ${costEntries.costUsd} END), 0)`,
+      yesterday: sql<number>`COALESCE(SUM(CASE WHEN ${costEntries.date} = ${yesterday} THEN ${costEntries.costUsd} END), 0)`,
+      thisWeek: sql<number>`COALESCE(SUM(CASE WHEN ${costEntries.date} >= ${week} THEN ${costEntries.costUsd} END), 0)`,
+      thisMonth: sql<number>`COALESCE(SUM(CASE WHEN ${costEntries.date} >= ${month} THEN ${costEntries.costUsd} END), 0)`,
+      thisYear: sql<number>`COALESCE(SUM(CASE WHEN ${costEntries.date} >= ${year} THEN ${costEntries.costUsd} END), 0)`,
+      allTime: sql<number>`COALESCE(SUM(${costEntries.costUsd}), 0)`,
+    })
+    .from(costEntries)
+    .get()!;
+
+  return row;
 }
 
 // Daily spend by provider for chart
@@ -142,7 +149,7 @@ export type SyncStatus = {
 };
 
 export function getSyncStatuses(): SyncStatus[] {
-  const providers = ["openai", "xai", "gemini", "openrouter"];
+  const providers = PROVIDER_NAMES;
   return providers.map((provider) => {
     const latest = db
       .select()
@@ -223,4 +230,101 @@ export function logSync(provider: string, status: string, recordsSynced?: number
     recordsSynced: recordsSynced ?? null,
     errorMessage: errorMessage ?? null,
   }).run();
+}
+
+// Full sync history for a provider (most recent first)
+export type SyncLogEntry = {
+  id: number;
+  provider: string;
+  syncedAt: string;
+  status: string;
+  recordsSynced: number | null;
+  errorMessage: string | null;
+};
+
+export function getSyncHistory(provider: string, limit = 20): SyncLogEntry[] {
+  return db
+    .select()
+    .from(syncLog)
+    .where(eq(syncLog.provider, provider))
+    .orderBy(desc(syncLog.syncedAt))
+    .limit(limit)
+    .all();
+}
+
+export function getAllSyncHistory(limit = 20): Record<string, SyncLogEntry[]> {
+  const providers = PROVIDER_NAMES;
+  const result: Record<string, SyncLogEntry[]> = {};
+  for (const p of providers) {
+    result[p] = getSyncHistory(p, limit);
+  }
+  return result;
+}
+
+// Latest data date per provider (for freshness indicators)
+export type ProviderFreshness = {
+  provider: string;
+  latestDate: string | null;
+  totalSpend: number;
+};
+
+// Entries that were touched by a specific sync run
+export type SyncedEntry = {
+  model: string;
+  date: string;
+  costUsd: number;
+  direction: string | null;
+  unitType: string;
+  tokensIn: number | null;
+  tokensOut: number | null;
+  requests: number | null;
+  rawLineItem: string | null;
+};
+
+export function getEntriesForSync(provider: string, syncedAt: string): SyncedEntry[] {
+  const syncTime = new Date(syncedAt).getTime();
+  const windowStart = new Date(syncTime - 2000).toISOString();
+  const windowEnd = new Date(syncTime + 500).toISOString();
+
+  return db
+    .select({
+      model: costEntries.model,
+      date: costEntries.date,
+      costUsd: costEntries.costUsd,
+      direction: costEntries.direction,
+      unitType: costEntries.unitType,
+      tokensIn: costEntries.tokensIn,
+      tokensOut: costEntries.tokensOut,
+      requests: costEntries.requests,
+      rawLineItem: costEntries.rawLineItem,
+    })
+    .from(costEntries)
+    .where(
+      and(
+        eq(costEntries.provider, provider),
+        gte(costEntries.syncedAt, windowStart),
+        lte(costEntries.syncedAt, windowEnd)
+      )
+    )
+    .orderBy(desc(costEntries.date), costEntries.model)
+    .all();
+}
+
+export function getProviderFreshness(): ProviderFreshness[] {
+  const rows = db
+    .select({
+      provider: costEntries.provider,
+      latestDate: sql<string>`MAX(${costEntries.date})`,
+      totalSpend: sql<number>`COALESCE(SUM(${costEntries.costUsd}), 0)`,
+    })
+    .from(costEntries)
+    .groupBy(costEntries.provider)
+    .all();
+
+  const byProvider = new Map(rows.map((r) => [r.provider, r]));
+  return PROVIDER_NAMES.map((provider) => ({
+    provider,
+    latestDate: byProvider.get(provider)?.latestDate ?? null,
+    totalSpend: byProvider.get(provider)?.totalSpend ?? 0,
+  }));
 }

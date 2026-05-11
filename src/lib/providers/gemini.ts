@@ -1,5 +1,6 @@
 import { BigQuery } from "@google-cloud/bigquery";
 import type { ProviderAdapter, CostEntry } from "./types";
+import { toEasternDate } from "../timezone";
 
 // Gemini costs come from GCP BigQuery billing export.
 // Setup required:
@@ -131,11 +132,11 @@ export class GeminiAdapter implements ProviderAdapter {
     }
 
     const bq = new BigQuery();
-    const sinceStr = since.toISOString().slice(0, 10);
+    const sinceStr = toEasternDate(since);
 
     const query = `
       SELECT
-        DATE(usage_start_time) as usage_date,
+        DATE(usage_start_time, "America/New_York") as usage_date,
         sku.description as sku_description,
         SUM(cost) as total_cost,
         SUM(usage.amount) as total_usage,
@@ -143,7 +144,7 @@ export class GeminiAdapter implements ProviderAdapter {
       FROM \`${table}\`
       WHERE
         service.description IN ('Generative Language API', 'Gemini API')
-        AND DATE(usage_start_time) >= @since_date
+        AND DATE(usage_start_time, "America/New_York") >= @since_date
         AND cost > 0
         AND sku.description NOT LIKE '%Tax%'
       GROUP BY

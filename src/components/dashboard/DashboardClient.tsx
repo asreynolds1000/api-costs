@@ -7,6 +7,7 @@ import type {
   ProviderSpend,
   ModelSpend,
   SyncStatus,
+  ProviderFreshness,
 } from "@/lib/db/queries";
 import { PeriodSummary } from "./PeriodSummary";
 import { SpendTimeline } from "./SpendTimeline";
@@ -16,6 +17,8 @@ import { ManualEntryForm } from "./ManualEntryForm";
 import { DateRangePicker } from "./DateRangePicker";
 import { ProviderFilter } from "./ProviderFilter";
 import { SyncBar } from "./SyncBar";
+import { SyncHistory } from "./SyncHistory";
+import { daysAgo } from "@/lib/format";
 
 type DashboardData = {
   summary: PeriodSummaryType;
@@ -24,13 +27,8 @@ type DashboardData = {
   models: ModelSpend[];
   syncStatuses: SyncStatus[];
   providerConfigured: Record<string, boolean>;
+  freshness: ProviderFreshness[];
 };
-
-function daysAgoStr(n: number): string {
-  const d = new Date();
-  d.setDate(d.getDate() - n);
-  return d.toISOString().slice(0, 10);
-}
 
 export function DashboardClient({ data }: { data: DashboardData }) {
   const [showManualEntry, setShowManualEntry] = useState(false);
@@ -38,7 +36,7 @@ export function DashboardClient({ data }: { data: DashboardData }) {
   const [filteredModels, setFilteredModels] = useState<ModelSpend[]>(data.models);
   const [activeProvider, setActiveProvider] = useState<string | null>(null);
 
-  const cutoffStr = daysAgoStr(rangeDays);
+  const cutoffStr = daysAgo(rangeDays);
   const todayStr = new Date().toISOString().slice(0, 10);
 
   // Fetch model data for the selected range
@@ -86,7 +84,7 @@ export function DashboardClient({ data }: { data: DashboardData }) {
       </div>
 
       {/* Period Summary Cards - always relative to today */}
-      <PeriodSummary data={data.summary} />
+      <PeriodSummary data={data.summary} freshness={data.freshness} />
 
       {/* Filters Row */}
       <div className="flex items-center justify-between">
@@ -122,6 +120,9 @@ export function DashboardClient({ data }: { data: DashboardData }) {
           <ModelTable data={displayModels} />
         </div>
       </div>
+
+      {/* Sync History Accordion */}
+      <SyncHistory />
 
       {/* Manual Entry Modal */}
       {showManualEntry && (

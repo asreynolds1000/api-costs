@@ -4,6 +4,7 @@ import {
   getProviderSpend,
   getModelSpend,
   getSyncStatuses,
+  getProviderFreshness,
 } from "@/lib/db/queries";
 import { DashboardClient } from "@/components/dashboard/DashboardClient";
 
@@ -23,6 +24,7 @@ export default function Home() {
   const providers = getProviderSpend();
   const models = getModelSpend();
   const syncStatuses = getSyncStatuses();
+  const freshness = getProviderFreshness();
 
   const geminiSyncConfigured = !!(
     process.env.GOOGLE_APPLICATION_CREDENTIALS &&
@@ -35,6 +37,7 @@ export default function Home() {
     xai: !!process.env.XAI_MANAGEMENT_KEY && !!process.env.XAI_TEAM_ID,
     gemini: geminiSyncConfigured,
     openrouter: !!process.env.OPENROUTER_MGMT_KEY,
+    fal: !!process.env.FAL_API_KEY,
   };
 
   return (
@@ -46,6 +49,7 @@ export default function Home() {
         models,
         syncStatuses,
         providerConfigured,
+        freshness,
       }}
     />
   );
