@@ -34,6 +34,7 @@ export default function Home() {
 
   const providerConfigured: Record<string, boolean> = {
     openai: !!process.env.OPENAI_ADMIN_KEY,
+    anthropic: !!process.env.ANTHROPIC_ADMIN_KEY,
     xai: !!process.env.XAI_MANAGEMENT_KEY && !!process.env.XAI_TEAM_ID,
     gemini: geminiSyncConfigured,
     openrouter: !!process.env.OPENROUTER_MGMT_KEY,

@@ -10,6 +10,7 @@
   --accent-green: #22c55e;
   --accent-amber: #f59e0b;
   --provider-openai: #10b981;
+  --provider-anthropic: #d97757;
   --provider-xai: #8b5cf6;
   --provider-gemini: #3b82f6;
   --provider-openrouter: #f97316;
@@ -22,6 +23,7 @@
   --color-card-border: var(--card-border);
   --color-muted: var(--muted);
   --color-provider-openai: var(--provider-openai);
+  --color-provider-anthropic: var(--provider-anthropic);
   --color-provider-xai: var(--provider-xai);
   --color-provider-gemini: var(--provider-gemini);
   --color-provider-openrouter: var(--provider-openrouter);

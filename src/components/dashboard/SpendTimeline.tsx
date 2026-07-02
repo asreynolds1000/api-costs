@@ -16,7 +16,7 @@ import { getProviderLabel } from "@/lib/format";
 // Fills gaps between first and last date so the chart has continuous x-axis
 function pivotData(rows: DailySpend[]) {
   const byDate = new Map<string, Record<string, number>>();
-  const defaults = { openai: 0, xai: 0, gemini: 0, openrouter: 0 };
+  const defaults = { openai: 0, anthropic: 0, xai: 0, gemini: 0, openrouter: 0 };
   for (const row of rows) {
     if (!byDate.has(row.date)) byDate.set(row.date, { ...defaults });
     const entry = byDate.get(row.date)!;
@@ -38,6 +38,7 @@ function pivotData(rows: DailySpend[]) {
       date: iso.slice(5),
       fullDate: iso,
       openai: entry.openai ?? 0,
+      anthropic: entry.anthropic ?? 0,
       xai: entry.xai ?? 0,
       gemini: entry.gemini ?? 0,
       openrouter: entry.openrouter ?? 0,
@@ -49,12 +50,13 @@ function pivotData(rows: DailySpend[]) {
 
 const PROVIDER_COLORS: Record<string, string> = {
   openai: "#10b981",
+  anthropic: "#d97757",
   xai: "#8b5cf6",
   gemini: "#3b82f6",
   openrouter: "#f97316",
 };
 
-const providers = ["openai", "xai", "gemini", "openrouter"];
+const providers = ["openai", "anthropic", "xai", "gemini", "openrouter"];
 
 export function SpendTimeline({ data }: { data: DailySpend[] }) {
   const chartData = pivotData(data);

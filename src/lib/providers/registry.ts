@@ -5,9 +5,11 @@ import { GeminiAdapter } from "./gemini";
 import { OpenRouterAdapter } from "./openrouter";
 import { BflAdapter } from "./bfl";
 import { FalAdapter } from "./fal";
+import { AnthropicAdapter } from "./anthropic";
 
 const adapters: Record<string, ProviderAdapter> = {
   openai: new OpenAIAdapter(),
+  anthropic: new AnthropicAdapter(),
   xai: new XaiAdapter(),
   gemini: new GeminiAdapter(),
   openrouter: new OpenRouterAdapter(),

@@ -27,6 +27,7 @@ export function formatCurrencyDetail(amount: number): string {
 // Provider display names and colors
 export const PROVIDER_CONFIG: Record<string, { label: string; color: string }> = {
   openai: { label: "OpenAI", color: "var(--provider-openai)" },
+  anthropic: { label: "Anthropic", color: "var(--provider-anthropic, #d97757)" },
   xai: { label: "xAI", color: "var(--provider-xai)" },
   gemini: { label: "Gemini", color: "var(--provider-gemini)" },
   openrouter: { label: "OpenRouter", color: "var(--provider-openrouter)" },
