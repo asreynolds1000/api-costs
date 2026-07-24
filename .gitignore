@@ -50,3 +50,5 @@ data/*.sqlite-shm
 
 # claude code local notes
 .claude/
+data/costs.db
+data/*.db
