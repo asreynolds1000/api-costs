@@ -7,6 +7,7 @@ import {
   getProviderFreshness,
 } from "@/lib/db/queries";
 import { DashboardClient } from "@/components/dashboard/DashboardClient";
+import { getPlanUsage } from "@/lib/plans";
 
 // Don't cache -- always read fresh from SQLite
 export const dynamic = "force-dynamic";
@@ -25,6 +26,9 @@ export default function Home() {
   const models = getModelSpend();
   const syncStatuses = getSyncStatuses();
   const freshness = getProviderFreshness();
+  const plans = getPlanUsage();
+  // eslint-disable-next-line react-hooks/purity -- server component; one clock read per request
+  const serverNow = Date.now();
 
   const geminiSyncConfigured = !!(
     process.env.GOOGLE_APPLICATION_CREDENTIALS &&
@@ -51,6 +55,8 @@ export default function Home() {
         syncStatuses,
         providerConfigured,
         freshness,
+        plans,
+        serverNow,
       }}
     />
   );

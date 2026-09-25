@@ -1,19 +1,33 @@
 @import "tailwindcss";
 
 :root {
+  color-scheme: dark;
   --background: #0f1117;
   --foreground: #e4e4e7;
   --card: #1a1b23;
   --card-border: #2a2b35;
-  --muted: #8b8b95;
-  --accent-blue: #3b82f6;
+  --muted: #9a9aa6; /* 6.2:1 on --card */
+  --accent-blue: #3987e5;
   --accent-green: #22c55e;
-  --accent-amber: #f59e0b;
-  --provider-openai: #10b981;
-  --provider-anthropic: #d97757;
-  --provider-xai: #8b5cf6;
-  --provider-gemini: #3b82f6;
-  --provider-openrouter: #f97316;
+  --accent-amber: #fab219;
+
+  /* Plan-limit meters: neutral fill, status colours only when near the limit */
+  --meter: #cfd0d8;
+  --meter-track: #2c2d38;
+  --warning: #fab219; /* 9.3:1 on --card */
+  --critical: #e66767; /* 5.3:1 on --card */
+
+  /* Provider series colours. Validated as a set (dataviz validate_palette.js,
+     dark, surface #1a1b23, adjacent pairs in this order, which is the chart stack order):
+     worst CVD dE 8.4, worst normal-vision dE 19.3, all >= 3:1. Change them
+     together and re-run the validator. */
+  --provider-gemini: #3987e5;
+  --provider-anthropic: #d95926;
+  --provider-openai: #199e70;
+  --provider-openrouter: #c98500;
+  --provider-fal: #d55181;
+  --provider-bfl: #008300;
+  --provider-xai: #9085e9;
 }
 
 @theme inline {
@@ -22,11 +36,13 @@
   --color-card: var(--card);
   --color-card-border: var(--card-border);
   --color-muted: var(--muted);
-  --color-provider-openai: var(--provider-openai);
-  --color-provider-anthropic: var(--provider-anthropic);
-  --color-provider-xai: var(--provider-xai);
-  --color-provider-gemini: var(--provider-gemini);
-  --color-provider-openrouter: var(--provider-openrouter);
+  --color-accent-blue: var(--accent-blue);
+  --color-accent-green: var(--accent-green);
+  --color-accent-amber: var(--accent-amber);
+  --color-meter: var(--meter);
+  --color-meter-track: var(--meter-track);
+  --color-warning: var(--warning);
+  --color-critical: var(--critical);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
@@ -35,4 +51,18 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-geist-sans), system-ui, sans-serif;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent-blue);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
 }

@@ -37,6 +37,31 @@ npm run dev
 # Open http://localhost:4100
 ```
 
+## Plan limits (Claude and ChatGPT Codex subscriptions)
+
+Subscription usage is quota, not dollars, so it gets its own panel: percent used per
+window, when the window resets, and a notch showing how much of the window has passed.
+Both sources are local files; no API keys or network calls.
+
+| Plan | Source | Windows |
+|------|--------|---------|
+| ChatGPT Codex | Rate-limit snapshots Codex writes to `~/.codex/sessions/**/rollout-*.jsonl` (override with `CODEX_HOME`) | Whatever the plan reports, e.g. weekly, or 5-hour + weekly |
+| Claude (Pro/Max) | `scripts/claude-statusline.sh`, run as the Claude Code status line, records the `rate_limits` field to `~/.local/state/ai-usage/claude-rate-limits.json` (override with `CLAUDE_USAGE_STATE`) | 5-hour and weekly |
+
+To enable the Claude side, add to your Claude Code settings (use an absolute path, and repeat
+for each `CLAUDE_CONFIG_DIR` you use):
+
+```json
+"statusLine": { "type": "command", "command": "/abs/path/to/api-costs/scripts/claude-statusline.sh" }
+```
+
+Requires `jq`. The status line also prints model, context used and both plan percentages.
+Readings update only when Claude Code or Codex runs on this machine; usage from other
+machines or the web apps shows up at the next local reading. Model-specific weekly limits
+and credit balances are not in either source.
+
+`npm test` runs the parser and status line tests.
+
 ## Provider setup
 
 ### OpenAI

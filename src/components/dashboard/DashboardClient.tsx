@@ -19,6 +19,8 @@ import { ProviderFilter } from "./ProviderFilter";
 import { SyncBar } from "./SyncBar";
 import { SyncHistory } from "./SyncHistory";
 import { daysAgo } from "@/lib/format";
+import { PlanUsage } from "./PlanUsage";
+import type { PlanUsage as PlanUsageType } from "@/lib/plans";
 
 type DashboardData = {
   summary: PeriodSummaryType;
@@ -28,6 +30,8 @@ type DashboardData = {
   syncStatuses: SyncStatus[];
   providerConfigured: Record<string, boolean>;
   freshness: ProviderFreshness[];
+  plans: PlanUsageType[];
+  serverNow: number;
 };
 
 export function DashboardClient({ data }: { data: DashboardData }) {
@@ -82,6 +86,8 @@ export function DashboardClient({ data }: { data: DashboardData }) {
           providerConfigured={data.providerConfigured}
         />
       </div>
+
+      <PlanUsage initial={data.plans} serverNow={data.serverNow} />
 
       {/* Period Summary Cards - always relative to today */}
       <PeriodSummary data={data.summary} freshness={data.freshness} />

@@ -52,3 +52,6 @@ data/*.sqlite-shm
 .claude/
 data/costs.db
 data/*.db
+
+# local planning notes
+docs/plans/
