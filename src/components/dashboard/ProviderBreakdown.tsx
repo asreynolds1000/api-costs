@@ -1,83 +1,44 @@
-"use client";
-
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
 import type { ProviderSpend } from "@/lib/db/queries";
-import { getProviderLabel, formatCurrency } from "@/lib/format";
+import { getProviderLabel, getProviderColor, formatCurrency } from "@/lib/format";
 
-const PROVIDER_COLORS: Record<string, string> = {
-  openai: "#10b981",
-  xai: "#8b5cf6",
-  gemini: "#3b82f6",
-  openrouter: "#f97316",
-};
-
+// Ranked bars: dollars and share for each provider in the selected range.
 export function ProviderBreakdown({ data }: { data: ProviderSpend[] }) {
-  const total = data.reduce((sum, d) => sum + d.cost, 0);
+  const rows = data.filter((d) => d.cost > 0);
+  const total = rows.reduce((sum, d) => sum + d.cost, 0);
 
   if (total === 0) {
-    return (
-      <div className="h-full flex items-center justify-center text-muted text-sm">
-        No data
-      </div>
-    );
+    return <p className="text-muted text-sm py-6 text-center">No spend in this range.</p>;
   }
 
-  const chartData = data.map((d) => ({
-    name: getProviderLabel(d.provider),
-    provider: d.provider,
-    value: d.cost,
-    pct: ((d.cost / total) * 100).toFixed(1),
-  }));
-
-  const summary = chartData.map((d) => `${d.name} ${d.pct}%`).join(", ");
+  const max = rows[0].cost;
 
   return (
-    <div className="flex flex-col h-full">
-      <div className="flex-1 min-h-0" role="img" aria-label={`Provider breakdown: ${summary}`}>
-        <ResponsiveContainer width="100%" height="100%">
-          <PieChart>
-            <Pie
-              data={chartData}
-              cx="50%"
-              cy="50%"
-              innerRadius="55%"
-              outerRadius="80%"
-              paddingAngle={2}
-              dataKey="value"
-            >
-              {chartData.map((entry) => (
-                <Cell
-                  key={entry.provider}
-                  fill={PROVIDER_COLORS[entry.provider] ?? "#888"}
-                />
-              ))}
-            </Pie>
-            <Tooltip
-              contentStyle={{
-                backgroundColor: "#1a1b23",
-                border: "1px solid #2a2b35",
-                borderRadius: 8,
-                fontSize: 12,
-              }}
-              formatter={(value) => [formatCurrency(Number(value)), "Spend"]}
-            />
-          </PieChart>
-        </ResponsiveContainer>
-      </div>
-      <div className="space-y-1.5 pt-2">
-        {chartData.map((entry) => (
-          <div key={entry.provider} className="flex items-center justify-between gap-4 text-sm">
-            <div className="flex items-center gap-2">
-              <div
-                className="w-2.5 h-2.5 rounded-full shrink-0"
-                style={{ backgroundColor: PROVIDER_COLORS[entry.provider] ?? "#888" }}
-              />
-              <span>{entry.name}</span>
+    <ul className="space-y-3.5">
+      {rows.map((d) => {
+        const pct = (d.cost / total) * 100;
+        return (
+          <li key={d.provider}>
+            <div className="flex items-baseline justify-between gap-3 text-sm mb-1">
+              <span>{getProviderLabel(d.provider)}</span>
+              <span className="tabular-nums">
+                {formatCurrency(d.cost)}
+                <span className="text-muted ml-2 inline-block w-10 text-right">
+                  {pct < 1 ? "<1" : Math.round(pct)}%
+                </span>
+              </span>
             </div>
-            <span className="font-mono text-muted whitespace-nowrap">{entry.pct}%</span>
-          </div>
-        ))}
-      </div>
-    </div>
+            <div className="h-1.5 rounded-full bg-card-border/60" aria-hidden>
+              <div
+                className="h-full rounded-full"
+                style={{
+                  width: `${Math.max((d.cost / max) * 100, 1.5)}%`,
+                  backgroundColor: getProviderColor(d.provider),
+                }}
+              />
+            </div>
+          </li>
+        );
+      })}
+    </ul>
   );
 }

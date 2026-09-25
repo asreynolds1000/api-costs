@@ -1,18 +1,19 @@
-# API Cost Dashboard
+# AI Usage Dashboard
 
-Track AI API spending across OpenAI, xAI/Grok, Google Gemini, and OpenRouter in a single dashboard.
+Track AI API spending across OpenAI, Anthropic, xAI/Grok, Google Gemini, OpenRouter, fal.ai and BFL, plus Claude and ChatGPT Codex subscription limits, in a single dashboard.
 
 Pulls actual billed amounts from each provider's billing API. No proxies, no estimations from token counts. Runs locally with SQLite storage.
 
 ## What it does
 
-- **Period summaries** -- today, this week, month, year, all time
-- **Daily spend chart** -- stacked by provider, 7d/30d/90d/1y range picker
-- **Provider breakdown** -- donut chart with percentages
+- **Plan limits** -- Claude (Pro/Max) and ChatGPT Codex usage per window, with reset times and a pace marker
+- **Period summaries** -- this week, this month (with last month), last 30 days, this year
+- **Spend chart** -- stacked bars by provider; daily for 7/30/90 days, weekly for 1 year
+- **Provider breakdown** -- dollars and share per provider for the selected range
 - **Model table** -- sortable by cost, model, or provider
-- **Manual entry** -- add costs for any provider (useful before APIs are configured)
-- **Auto-sync on page load** -- syncs all providers once per hour when you visit the dashboard
-- Dark theme, responsive layout, keyboard accessible
+- **Sync** -- one button syncs every configured provider; schedule it with cron for daily data
+- **Manual entries** -- `POST /api/entries/manual` for providers without a billing API
+- Dark theme, keyboard accessible
 
 ## Provider support
 
@@ -178,9 +179,10 @@ pm2 restart api-costs   # restart after code changes
 
 1. Create `src/lib/providers/yourprovider.ts` implementing the `ProviderAdapter` interface
 2. Register it in `src/lib/providers/registry.ts`
-3. Add a color in `src/app/globals.css` and `src/lib/format.ts`
-4. Add the provider to the `providers` array and `defaults` object in `SpendTimeline.tsx`
-5. Add env var check in `src/app/page.tsx`
+3. Add a `--provider-*` colour in `src/app/globals.css` and an entry in `PROVIDER_CONFIG` in
+   `src/lib/format.ts`. The colours are validated as an ordered set (the chart stack order), so
+   re-check colour-blind separation when adding one. The chart picks the provider up automatically.
+4. Add env var check in `src/app/page.tsx`
 
 ## Tech stack
 

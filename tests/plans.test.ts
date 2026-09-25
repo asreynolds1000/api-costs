@@ -91,7 +91,7 @@ const SCRIPT = join(import.meta.dirname, "..", "scripts", "claude-statusline.sh"
 function runStatusline(input: object, stateDir: string) {
   const r = spawnSync("bash", [SCRIPT], {
     input: JSON.stringify(input),
-    env: { ...process.env, AI_USAGE_STATE_DIR: stateDir },
+    env: { ...process.env, CLAUDE_USAGE_STATE: join(stateDir, "claude-rate-limits.json") },
     encoding: "utf8",
   });
   return { out: r.stdout.trim(), err: r.stderr, code: r.status };

@@ -13,8 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "API Cost Dashboard",
-  description: "Track AI API spending across OpenAI, xAI, and Gemini",
+  title: "AI Usage",
+  description: "Claude and Codex plan limits plus API spend across providers",
 };
 
 export default function RootLayout({

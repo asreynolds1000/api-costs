@@ -1,7 +1,7 @@
 import { sql, eq, and, gte, lte, desc } from "drizzle-orm";
 import { db } from "./index";
 import { costEntries, syncLog } from "./schema";
-import { toEasternDate } from "../timezone";
+import { shiftDate, toEasternDate } from "../timezone";
 import { PROVIDER_NAMES } from "../format";
 
 function todayET(): string {
@@ -9,17 +9,7 @@ function todayET(): string {
 }
 
 function offsetET(days: number): string {
-  const d = new Date();
-  d.setDate(d.getDate() + days);
-  return toEasternDate(d);
-}
-
-function startOfDay(): string {
-  return todayET();
-}
-
-function startOfYesterday(): string {
-  return offsetET(-1);
+  return shiftDate(todayET(), days);
 }
 
 function startOfWeek(): string {
@@ -29,37 +19,42 @@ function startOfWeek(): string {
 }
 
 function startOfMonth(): string {
-  const today = todayET();
-  return today.slice(0, 8) + "01";
+  return todayET().slice(0, 8) + "01";
+}
+
+function startOfLastMonth(): string {
+  const [y, m] = todayET().split("-").map(Number);
+  const year = m === 1 ? y - 1 : y;
+  const month = m === 1 ? 12 : m - 1;
+  return `${year}-${String(month).padStart(2, "0")}-01`;
 }
 
 function startOfYear(): string {
-  const today = todayET();
-  return today.slice(0, 5) + "01-01";
+  return todayET().slice(0, 5) + "01-01";
 }
 
 export type PeriodSummary = {
-  today: number;
-  yesterday: number;
   thisWeek: number;
   thisMonth: number;
+  lastMonth: number;
+  last30Days: number;
   thisYear: number;
   allTime: number;
 };
 
 export function getPeriodSummary(): PeriodSummary {
-  const today = startOfDay();
-  const yesterday = startOfYesterday();
   const week = startOfWeek();
   const month = startOfMonth();
+  const lastMonth = startOfLastMonth();
+  const last30 = offsetET(-29);
   const year = startOfYear();
 
   const row = db
     .select({
-      today: sql<number>`COALESCE(SUM(CASE WHEN ${costEntries.date} >= ${today} THEN ${costEntries.costUsd} END), 0)`,
-      yesterday: sql<number>`COALESCE(SUM(CASE WHEN ${costEntries.date} = ${yesterday} THEN ${costEntries.costUsd} END), 0)`,
       thisWeek: sql<number>`COALESCE(SUM(CASE WHEN ${costEntries.date} >= ${week} THEN ${costEntries.costUsd} END), 0)`,
       thisMonth: sql<number>`COALESCE(SUM(CASE WHEN ${costEntries.date} >= ${month} THEN ${costEntries.costUsd} END), 0)`,
+      lastMonth: sql<number>`COALESCE(SUM(CASE WHEN ${costEntries.date} >= ${lastMonth} AND ${costEntries.date} < ${month} THEN ${costEntries.costUsd} END), 0)`,
+      last30Days: sql<number>`COALESCE(SUM(CASE WHEN ${costEntries.date} >= ${last30} THEN ${costEntries.costUsd} END), 0)`,
       thisYear: sql<number>`COALESCE(SUM(CASE WHEN ${costEntries.date} >= ${year} THEN ${costEntries.costUsd} END), 0)`,
       allTime: sql<number>`COALESCE(SUM(${costEntries.costUsd}), 0)`,
     })
@@ -96,23 +91,6 @@ export type ProviderSpend = {
   cost: number;
 };
 
-export function getProviderSpend(startDate?: string, endDate?: string): ProviderSpend[] {
-  const conditions = [];
-  if (startDate) conditions.push(gte(costEntries.date, startDate));
-  if (endDate) conditions.push(lte(costEntries.date, endDate));
-
-  return db
-    .select({
-      provider: costEntries.provider,
-      cost: sql<number>`SUM(${costEntries.costUsd})`,
-    })
-    .from(costEntries)
-    .where(conditions.length > 0 ? and(...conditions) : undefined)
-    .groupBy(costEntries.provider)
-    .orderBy(sql`SUM(${costEntries.costUsd}) DESC`)
-    .all();
-}
-
 // Spend by model
 export type ModelSpend = {
   model: string;
@@ -146,6 +124,7 @@ export type SyncStatus = {
   lastSync: string | null;
   status: string | null;
   recordsSynced: number | null;
+  lastSuccess: string | null;
 };
 
 export function getSyncStatuses(): SyncStatus[] {
@@ -158,12 +137,20 @@ export function getSyncStatuses(): SyncStatus[] {
       .orderBy(desc(syncLog.syncedAt))
       .limit(1)
       .get();
+    const lastSuccess = db
+      .select({ syncedAt: syncLog.syncedAt })
+      .from(syncLog)
+      .where(and(eq(syncLog.provider, provider), eq(syncLog.status, "success")))
+      .orderBy(desc(syncLog.syncedAt))
+      .limit(1)
+      .get();
 
     return {
       provider,
       lastSync: latest?.syncedAt ?? null,
       status: latest?.status ?? null,
       recordsSynced: latest?.recordsSynced ?? null,
+      lastSuccess: lastSuccess?.syncedAt ?? null,
     };
   });
 }

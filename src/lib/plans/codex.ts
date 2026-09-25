@@ -9,10 +9,12 @@ import {
   type PlanUsage,
 } from "./parse";
 
-// ~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl, 1+ GB in total, so only the newest
-// files are opened and they are read backwards from the end.
-const DAY_DIRS = 14; // a resumed session keeps appending to the day it started
-const FILES_TO_CHECK = 3; // concurrent sessions: take the newest snapshot across these
+// ~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl, 1+ GB in total. Every file is stat'ed
+// (cheap), but files are opened newest-mtime first and read backwards from the end, and
+// the scan stops at the first file last written before the best snapshot found so far:
+// that file cannot contain a newer one. A resumed session keeps appending to the day
+// directory it started in, which is why mtime, not directory date, drives the order.
+const MAX_FILES_OPENED = 40;
 const CHUNK = 2 * 1024 * 1024;
 const MAX_BYTES_PER_FILE = 64 * 1024 * 1024; // single lines can exceed 1 MB
 
@@ -24,26 +26,25 @@ function listDir(dir: string): string[] {
   }
 }
 
-function newestSessionFiles(root: string): string[] {
-  const numericDesc = (dir: string) =>
-    listDir(dir).filter((n) => /^\d+$/.test(n)).sort().reverse();
-
-  const days: string[] = [];
-  outer: for (const y of numericDesc(root)) {
-    for (const m of numericDesc(join(root, y))) {
-      for (const d of numericDesc(join(root, y, m))) {
-        days.push(join(root, y, m, d));
-        if (days.length >= DAY_DIRS) break outer;
+function sessionFilesByMtime(root: string): { path: string; mtime: number }[] {
+  const numeric = (dir: string) => listDir(dir).filter((n) => /^\d+$/.test(n));
+  const files: { path: string; mtime: number }[] = [];
+  for (const y of numeric(root)) {
+    for (const m of numeric(join(root, y))) {
+      for (const d of numeric(join(root, y, m))) {
+        const dir = join(root, y, m, d);
+        for (const f of listDir(dir)) {
+          if (!f.endsWith(".jsonl")) continue;
+          try {
+            files.push({ path: join(dir, f), mtime: statSync(join(dir, f)).mtimeMs });
+          } catch {
+            // file vanished between readdir and stat
+          }
+        }
       }
     }
   }
-
-  return days
-    .flatMap((dir) => listDir(dir).filter((f) => f.endsWith(".jsonl")).map((f) => join(dir, f)))
-    .map((path) => ({ path, mtime: statSync(path).mtimeMs }))
-    .sort((a, b) => b.mtime - a.mtime)
-    .slice(0, FILES_TO_CHECK)
-    .map((f) => f.path);
+  return files.sort((a, b) => b.mtime - a.mtime);
 }
 
 // Reads complete lines backwards in chunks until a plan snapshot turns up.
@@ -83,8 +84,11 @@ export function getCodexUsage(nowSec = Date.now() / 1000): PlanUsage {
   const root = join(process.env.CODEX_HOME ?? join(homedir(), ".codex"), "sessions");
 
   let best: CodexSnapshot | null = null;
-  for (const file of newestSessionFiles(root)) {
-    const snap = lastSnapshotInFile(file);
+  let opened = 0;
+  for (const file of sessionFilesByMtime(root)) {
+    if (best && file.mtime < Date.parse(best.timestamp)) break;
+    if (++opened > MAX_FILES_OPENED) break;
+    const snap = lastSnapshotInFile(file.path);
     if (snap && (!best || snap.timestamp > best.timestamp)) best = snap;
   }
 

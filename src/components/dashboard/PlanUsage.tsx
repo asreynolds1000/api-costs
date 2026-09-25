@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { PlanUsage as PlanUsageType, QuotaWindow } from "@/lib/plans";
-import { windowElapsed } from "@/lib/plans/parse";
+import { applyReset, windowElapsed } from "@/lib/plans/parse";
 import { formatClockTime, formatDuration, formatRelativeTime } from "@/lib/format";
 
 const REFRESH_MS = 60_000;
@@ -14,14 +14,18 @@ export function PlanUsage({ initial, serverNow }: Props) {
   const [plans, setPlans] = useState(initial);
   // Starts at the server's clock so the first client render matches the server HTML.
   const [now, setNow] = useState(serverNow);
+  const latestRequest = useRef(0);
 
   useEffect(() => {
     let cancelled = false;
     async function refresh() {
       setNow(Date.now());
+      const id = ++latestRequest.current;
       try {
         const res = await fetch("/api/plans", { cache: "no-store" });
-        if (res.ok && !cancelled) setPlans(await res.json());
+        const body = res.ok ? await res.json() : null;
+        // A slower, older request must not overwrite a newer one
+        if (body && !cancelled && id === latestRequest.current) setPlans(body);
       } catch {
         // keep the last good reading
       }
@@ -92,8 +96,10 @@ function PlanCard({ plan, now }: { plan: PlanUsageType; now: number }) {
   );
 }
 
-function WindowMeter({ window: w, now }: { window: QuotaWindow; now: number }) {
+function WindowMeter({ window: reading, now }: { window: QuotaWindow; now: number }) {
   const nowSec = now / 1000;
+  // The window may have reset since this reading was fetched
+  const w = applyReset(reading, nowSec);
   const used = w.usedPercent;
   const elapsed = windowElapsed(w, nowSec);
   const level = used === null ? "none" : used >= 90 ? "critical" : used >= 75 ? "warning" : "normal";

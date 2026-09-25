@@ -203,13 +203,13 @@ export function SyncHistory() {
 
   return (
     <>
-      <div className="bg-card border border-card-border rounded-lg">
+      <div className="bg-card border border-card-border rounded-xl">
         <button
           onClick={() => setExpanded(!expanded)}
           className="w-full flex items-center justify-between px-4 py-3 hover:bg-card-border/10 transition-colors"
           aria-expanded={expanded}
         >
-          <span className="text-sm font-medium">Sync History</span>
+          <span className="text-sm font-medium">Sync history</span>
           <span className="text-muted text-xs">{expanded ? "▲" : "▼"}</span>
         </button>
 

@@ -17,8 +17,9 @@
 # stderr would blank the status line.
 
 input=$(cat)
-state_dir="${AI_USAGE_STATE_DIR:-$HOME/.local/state/ai-usage}"
-state="$state_dir/claude-rate-limits.json"
+# Same override the dashboard reads (src/lib/plans/claude.ts)
+state="${CLAUDE_USAGE_STATE:-$HOME/.local/state/ai-usage/claude-rate-limits.json}"
+state_dir=$(dirname "$state")
 
 if printf '%s' "$input" | jq -e '.rate_limits | type == "object"' >/dev/null 2>&1; then
   mkdir -p "$state_dir" 2>/dev/null

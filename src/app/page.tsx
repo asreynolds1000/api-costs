@@ -1,34 +1,29 @@
 import {
   getPeriodSummary,
   getDailySpend,
-  getProviderSpend,
   getModelSpend,
   getSyncStatuses,
-  getProviderFreshness,
 } from "@/lib/db/queries";
 import { DashboardClient } from "@/components/dashboard/DashboardClient";
 import { getPlanUsage } from "@/lib/plans";
+import { shiftDate, toEasternDate } from "@/lib/timezone";
+import { DEFAULT_RANGE_DAYS } from "@/lib/format";
 
-// Don't cache -- always read fresh from SQLite
+// Don't cache -- always read fresh from SQLite and the local usage files
 export const dynamic = "force-dynamic";
 
 export default function Home() {
-  // Query all data server-side from SQLite
-  // Get 1 year of daily data (client filters to selected range)
-  const oneYearAgo = new Date();
-  oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
-  const startDate = oneYearAgo.toISOString().slice(0, 10);
-  const endDate = new Date().toISOString().slice(0, 10);
-
-  const summary = getPeriodSummary();
-  const daily = getDailySpend(startDate, endDate);
-  const providers = getProviderSpend();
-  const models = getModelSpend();
-  const syncStatuses = getSyncStatuses();
-  const freshness = getProviderFreshness();
-  const plans = getPlanUsage();
-  // eslint-disable-next-line react-hooks/purity -- server component; one clock read per request
+  // One clock read per request; everything downstream derives dates from it, so the
+  // server HTML and the first client render agree.
+  // eslint-disable-next-line react-hooks/purity -- server component, runs once per request
   const serverNow = Date.now();
+  const today = toEasternDate(new Date(serverNow));
+
+  // A year of daily rows; the client slices it to the selected range. The upper bound is
+  // tomorrow because fal, xAI and BFL date rows in UTC, which is tomorrow in the ET evening.
+  const queryEnd = shiftDate(today, 1);
+  const daily = getDailySpend(shiftDate(today, -365), queryEnd);
+  const models = getModelSpend(shiftDate(today, -(DEFAULT_RANGE_DAYS - 1)), queryEnd);
 
   const geminiSyncConfigured = !!(
     process.env.GOOGLE_APPLICATION_CREDENTIALS &&
@@ -48,15 +43,14 @@ export default function Home() {
   return (
     <DashboardClient
       data={{
-        summary,
+        summary: getPeriodSummary(),
         daily,
-        providers,
         models,
-        syncStatuses,
+        syncStatuses: getSyncStatuses(),
         providerConfigured,
-        freshness,
-        plans,
+        plans: getPlanUsage(),
         serverNow,
+        today,
       }}
     />
   );

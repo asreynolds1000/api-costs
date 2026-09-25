@@ -79,8 +79,5 @@ export function formatDuration(seconds: number): string {
   return `${Math.floor(hours / 24)}d ${hours % 24}h`;
 }
 
-export function daysAgo(n: number): string {
-  const d = new Date();
-  d.setDate(d.getDate() - n);
-  return d.toISOString().slice(0, 10);
-}
+// Default date range for the spend views, in days (server and client must agree)
+export const DEFAULT_RANGE_DAYS = 30;

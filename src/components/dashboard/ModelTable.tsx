@@ -44,7 +44,7 @@ export function ModelTable({ data }: { data: ModelSpend[] }) {
   if (data.length === 0) {
     return (
       <div className="text-muted text-sm text-center py-6">
-        No model data yet.
+        No model spend in this range.
       </div>
     );
   }
@@ -53,9 +53,9 @@ export function ModelTable({ data }: { data: ModelSpend[] }) {
     <div className="overflow-x-auto">
       <table className="w-full text-sm">
         <thead>
-          <tr className="text-left text-muted text-xs uppercase tracking-wide border-b border-card-border">
+          <tr className="text-left text-muted text-xs border-b border-card-border">
             <th
-              className="pb-2 pr-4 cursor-pointer hover:text-foreground"
+              className="sticky top-0 bg-card pb-2 pr-4 font-medium cursor-pointer hover:text-foreground"
               tabIndex={0}
               aria-sort={ariaSort("model")}
               onClick={() => toggleSort("model")}
@@ -64,7 +64,7 @@ export function ModelTable({ data }: { data: ModelSpend[] }) {
               Model{arrow("model")}
             </th>
             <th
-              className="pb-2 pr-4 cursor-pointer hover:text-foreground"
+              className="sticky top-0 bg-card pb-2 pr-4 font-medium cursor-pointer hover:text-foreground"
               tabIndex={0}
               aria-sort={ariaSort("provider")}
               onClick={() => toggleSort("provider")}
@@ -73,7 +73,7 @@ export function ModelTable({ data }: { data: ModelSpend[] }) {
               Provider{arrow("provider")}
             </th>
             <th
-              className="pb-2 pr-4 text-right cursor-pointer hover:text-foreground"
+              className="sticky top-0 bg-card pb-2 pr-4 font-medium text-right cursor-pointer hover:text-foreground"
               tabIndex={0}
               aria-sort={ariaSort("cost")}
               onClick={() => toggleSort("cost")}
@@ -81,29 +81,29 @@ export function ModelTable({ data }: { data: ModelSpend[] }) {
             >
               Cost{arrow("cost")}
             </th>
-            <th className="pb-2 text-right">% of Total</th>
+            <th className="sticky top-0 bg-card pb-2 font-medium text-right">Share</th>
           </tr>
         </thead>
         <tbody>
-          {sorted.map((row, i) => {
+          {sorted.map((row) => {
             const pct = total > 0 ? ((row.cost / total) * 100).toFixed(1) : "0.0";
             return (
               <tr
                 key={`${row.provider}-${row.model}`}
-                className={i % 2 === 0 ? "bg-card/50" : ""}
+                className="border-b border-card-border/40 last:border-0 hover:bg-card-border/30"
               >
-                <td className="py-1.5 pr-4 font-mono text-xs">{row.model}</td>
-                <td className="py-1.5 pr-4">
+                <td className="py-2 pr-4 font-mono text-xs break-words">{row.model}</td>
+                <td className="py-2 pr-4 whitespace-nowrap">
                   <span
                     className="inline-block w-2 h-2 rounded-full mr-1.5"
                     style={{ backgroundColor: getProviderColor(row.provider) }}
                   />
                   {getProviderLabel(row.provider)}
                 </td>
-                <td className="py-1.5 pr-4 text-right font-mono">
+                <td className="py-2 pr-4 text-right tabular-nums">
                   {formatCurrencyDetail(row.cost)}
                 </td>
-                <td className="py-1.5 text-right text-muted">{pct}%</td>
+                <td className="py-2 text-right text-muted tabular-nums">{pct}%</td>
               </tr>
             );
           })}
