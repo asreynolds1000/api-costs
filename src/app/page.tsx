@@ -7,7 +7,10 @@ import {
 import { DashboardClient } from "@/components/dashboard/DashboardClient";
 import { getPlanUsage } from "@/lib/plans";
 import { shiftDate, toEasternDate } from "@/lib/timezone";
-import { DEFAULT_RANGE_DAYS } from "@/lib/format";
+import { ACTIVITY_DEFAULT_DAYS, DEFAULT_RANGE_DAYS } from "@/lib/format";
+import { getAllAdapters } from "@/lib/providers/registry";
+import { getSchedulerState } from "@/lib/scheduler";
+import { getActivity } from "@/lib/activity/queries";
 
 // Don't cache -- always read fresh from SQLite and the local usage files
 export const dynamic = "force-dynamic";
@@ -25,20 +28,12 @@ export default function Home() {
   const daily = getDailySpend(shiftDate(today, -365), queryEnd);
   const models = getModelSpend(shiftDate(today, -(DEFAULT_RANGE_DAYS - 1)), queryEnd);
 
-  const geminiSyncConfigured = !!(
-    process.env.GOOGLE_APPLICATION_CREDENTIALS &&
-    (process.env.GCP_BILLING_TABLE ||
-      (process.env.GCP_BILLING_PROJECT && process.env.GCP_BILLING_DATASET))
-  );
+  const activityYear = getActivity(shiftDate(today, -364), queryEnd);
+  const activity = getActivity(shiftDate(today, -(ACTIVITY_DEFAULT_DAYS - 1)), queryEnd);
 
-  const providerConfigured: Record<string, boolean> = {
-    openai: !!process.env.OPENAI_ADMIN_KEY,
-    anthropic: !!process.env.ANTHROPIC_ADMIN_KEY,
-    xai: !!process.env.XAI_MANAGEMENT_KEY && !!process.env.XAI_TEAM_ID,
-    gemini: geminiSyncConfigured,
-    openrouter: !!process.env.OPENROUTER_MGMT_KEY,
-    fal: !!process.env.FAL_API_KEY,
-  };
+  const providerConfigured = Object.fromEntries(
+    getAllAdapters().map((a) => [a.provider, a.isConfigured()])
+  );
 
   return (
     <DashboardClient
@@ -49,6 +44,9 @@ export default function Home() {
         syncStatuses: getSyncStatuses(),
         providerConfigured,
         plans: getPlanUsage(),
+        scheduler: getSchedulerState(),
+        activityYear,
+        activity,
         serverNow,
         today,
       }}

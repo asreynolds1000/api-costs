@@ -2,6 +2,7 @@ import Database from "better-sqlite3";
 import { drizzle } from "drizzle-orm/better-sqlite3";
 import { join } from "path";
 import * as schema from "./schema";
+import { collapseNullDedupKeys } from "./migrate-dedup";
 
 const DB_PATH = process.env.DATABASE_PATH || join(process.cwd(), "data", "costs.sqlite");
 
@@ -15,6 +16,7 @@ function getDatabase() {
     sqlite.pragma("foreign_keys = ON");
     // busy_timeout prevents SQLITE_BUSY during build (multiple workers)
     sqlite.pragma("busy_timeout = 5000");
+    collapseNullDedupKeys(sqlite);
     globalForDb.__db = sqlite;
   }
   return globalForDb.__db;

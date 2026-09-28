@@ -10,16 +10,18 @@ export type QuotaWindow = {
   resetsAt: number | null; // epoch seconds
   updatedAt: string | null; // ISO time the reading was taken (Codex) or last changed (Claude)
   reset: boolean;
+  detail?: string; // e.g. "2,382 of 10,000 characters"
 };
 
 export type PlanUsage = {
-  id: "claude" | "codex";
+  id: "claude" | "codex" | "elevenlabs" | "magichour";
   name: string;
   status: "ok" | "missing" | "error";
   message?: string;
   note?: string;
   windows: QuotaWindow[];
   updatedAt: string | null; // newest reading across windows
+  balance?: { label: string; value: string }; // for credit-balance plans with no limit
 };
 
 export function windowLabel(minutes: number): string {

@@ -182,7 +182,7 @@ export function insertManualEntry(entry: ManualEntry) {
       tokensIn: entry.tokensIn ?? null,
       tokensOut: entry.tokensOut ?? null,
       requests: entry.requests ?? null,
-      rawLineItem: null,
+      rawLineItem: "", // never NULL: see providers/normalize.ts
       source: "manual",
       syncedAt: new Date().toISOString(),
     })

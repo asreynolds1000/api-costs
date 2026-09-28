@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import type {
   PeriodSummary as PeriodSummaryType,
   DailySpend,
@@ -9,10 +10,13 @@ import type {
   SyncStatus,
 } from "@/lib/db/queries";
 import type { PlanUsage as PlanUsageType } from "@/lib/plans";
+import type { SchedulerState } from "@/lib/scheduler";
+import type { ActivityResult } from "@/lib/activity/queries";
+import { ActivitySection } from "./ActivitySection";
 import { DEFAULT_RANGE_DAYS, formatCurrency, formatRelativeTime, getProviderLabel } from "@/lib/format";
 import { shiftDate } from "@/lib/timezone";
 import { PlanUsage } from "./PlanUsage";
-import { PeriodSummary } from "./PeriodSummary";
+import { SpendHero } from "./SpendHero";
 import { SpendTimeline } from "./SpendTimeline";
 import { ProviderBreakdown } from "./ProviderBreakdown";
 import { ModelTable } from "./ModelTable";
@@ -28,6 +32,9 @@ type DashboardData = {
   syncStatuses: SyncStatus[];
   providerConfigured: Record<string, boolean>;
   plans: PlanUsageType[];
+  scheduler: SchedulerState;
+  activityYear: ActivityResult;
+  activity: ActivityResult;
   serverNow: number;
   today: string; // YYYY-MM-DD, Eastern
 };
@@ -37,6 +44,9 @@ type DashboardData = {
 // in the header instead, not as every provider at once.)
 const SYNC_BEHIND_MS = 26 * 60 * 60 * 1000;
 
+// Re-render from the server (router.refresh keeps client state such as the range and filter).
+const PAGE_REFRESH_MS = 2 * 60 * 1000;
+
 export function DashboardClient({ data }: { data: DashboardData }) {
   const [rangeDays, setRangeDays] = useState(DEFAULT_RANGE_DAYS);
   const [activeProvider, setActiveProvider] = useState<string | null>(null);
@@ -44,6 +54,15 @@ export function DashboardClient({ data }: { data: DashboardData }) {
   const [modelsByRange, setModelsByRange] = useState<Record<number, ModelSpend[] | "error">>({
     [DEFAULT_RANGE_DAYS]: data.models,
   });
+  // New server data (auto-refresh or a sync) makes the cached model lists stale. Reset them
+  // during render when the data changes, rather than remounting, which would reset the range.
+  const [dataStamp, setDataStamp] = useState(data.serverNow);
+  if (dataStamp !== data.serverNow) {
+    setDataStamp(data.serverNow);
+    setModelsByRange({ [DEFAULT_RANGE_DAYS]: data.models });
+  }
+
+  useAutoRefresh(data.serverNow);
 
   const rangeStart = shiftDate(data.today, -(rangeDays - 1));
   const queryEnd = shiftDate(data.today, 1); // see page.tsx: some providers date rows in UTC
@@ -92,8 +111,8 @@ export function DashboardClient({ data }: { data: DashboardData }) {
   return (
     <main className="max-w-7xl w-full mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-8">
       <header className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-2xl font-semibold tracking-tight">AI usage</h1>
-        <SyncBar statuses={data.syncStatuses} providerConfigured={data.providerConfigured} now={data.serverNow} />
+        <h1 className="font-display text-3xl font-semibold tracking-tight">AI usage</h1>
+        <SyncBar statuses={data.syncStatuses} scheduler={data.scheduler} serverNow={data.serverNow} />
       </header>
 
       <PlanUsage initial={data.plans} serverNow={data.serverNow} />
@@ -117,7 +136,7 @@ export function DashboardClient({ data }: { data: DashboardData }) {
           )}
         </div>
 
-        <PeriodSummary data={data.summary} today={data.today} />
+        <SpendHero summary={data.summary} daily={data.daily} today={data.today} />
 
         <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
           <ProviderFilter providers={availableProviders} active={activeProvider} onChange={setActiveProvider} />
@@ -163,10 +182,37 @@ export function DashboardClient({ data }: { data: DashboardData }) {
           </div>
         </div>
 
-        <SyncHistory />
       </section>
+
+      <ActivitySection year={data.activityYear} initial={data.activity} today={data.today} serverNow={data.serverNow} />
+
+      <SyncHistory />
     </main>
   );
+}
+
+// Refresh every PAGE_REFRESH_MS while visible, and right away when the tab comes back after
+// being away longer than that. Hidden tabs don't poll.
+function useAutoRefresh(renderedAt: number) {
+  const router = useRouter();
+  const [, startTransition] = useTransition();
+  useEffect(() => {
+    const refresh = () => startTransition(() => router.refresh());
+    const due = () => Date.now() - renderedAt >= PAGE_REFRESH_MS;
+    const timer = setInterval(() => {
+      if (document.visibilityState === "visible") refresh();
+    }, PAGE_REFRESH_MS);
+    const onReturn = () => {
+      if (document.visibilityState === "visible" && due()) refresh();
+    };
+    document.addEventListener("visibilitychange", onReturn);
+    window.addEventListener("focus", onReturn);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener("visibilitychange", onReturn);
+      window.removeEventListener("focus", onReturn);
+    };
+  }, [router, renderedAt]);
 }
 
 function aggregateProviders(daily: DailySpend[]): ProviderSpend[] {

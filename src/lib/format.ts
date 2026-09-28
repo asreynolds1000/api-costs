@@ -36,6 +36,9 @@ export const PROVIDER_CONFIG: Record<string, { label: string; color: string }> =
   xai: { label: "xAI", color: "var(--provider-xai)" },
 };
 
+// Default range of the Activity section (server renders it, client switches ranges)
+export const ACTIVITY_DEFAULT_DAYS = 30;
+
 export const PROVIDER_NAMES = Object.keys(PROVIDER_CONFIG);
 
 export function getProviderLabel(provider: string): string {
@@ -81,3 +84,27 @@ export function formatDuration(seconds: number): string {
 
 // Default date range for the spend views, in days (server and client must agree)
 export const DEFAULT_RANGE_DAYS = 30;
+
+const compactFmt = new Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: 1 });
+const intFmt = new Intl.NumberFormat("en-US");
+
+// 1,284 / 12.9K / 4.2M / 22.7B
+export function formatCompact(n: number): string {
+  return Math.abs(n) < 10_000 ? intFmt.format(Math.round(n)) : compactFmt.format(n);
+}
+
+export function formatInt(n: number): string {
+  return intFmt.format(Math.round(n));
+}
+
+// Where a model was used: Claude Code, Codex, or an API provider's label
+export function getSourceLabel(source: string): string {
+  if (source === "claude-code") return "Claude Code";
+  if (source === "codex") return "Codex";
+  return getProviderLabel(source);
+}
+
+// Claude Code and Codex run on subscriptions, so their dollar figures are estimates at API list prices
+export function isSubscriptionSource(source: string): boolean {
+  return source === "claude-code" || source === "codex";
+}

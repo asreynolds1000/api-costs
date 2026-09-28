@@ -1,17 +1,19 @@
 # AI Usage Dashboard
 
-Track AI API spending across OpenAI, Anthropic, xAI/Grok, Google Gemini, OpenRouter, fal.ai and BFL, plus Claude and ChatGPT Codex subscription limits, in a single dashboard.
+Track AI API spending across OpenAI, Anthropic, xAI/Grok, Google Gemini, OpenRouter, fal.ai and BFL, subscription limits for Claude, ChatGPT Codex, ElevenLabs and Magic Hour, and what you actually used in Claude Code and Codex (tools, skills, subagents, models), in a single dashboard.
 
 Pulls actual billed amounts from each provider's billing API. No proxies, no estimations from token counts. Runs locally with SQLite storage.
 
 ## What it does
 
-- **Plan limits** -- Claude (Pro/Max) and ChatGPT Codex usage per window, with reset times and a pace marker
-- **Period summaries** -- this week, this month (with last month), last 30 days, this year
+- **Plan limits** -- Claude (Pro/Max), ChatGPT Codex and ElevenLabs as dials per window, with reset times, a pace notch and a straight-line projection ("runs out Thu 2 PM"); Magic Hour credit balance
+- **Spend summary** -- this month with daily bars and the change against last month at the same point, a month-end projection, last 30 days, this week, this year
+- **Activity** -- from the Claude Code and Codex logs on this machine: sessions, messages, a 12-month heatmap, MCP servers (with per-tool counts), skills, subagents and built-in tools, and every model used with tokens and its cost at API list prices
+- **Auto-sync** -- the server syncs every provider, refreshes quotas and indexes local logs every 30 minutes (`AUTO_SYNC_MINUTES`, 0 turns it off); the page refreshes itself every 2 minutes
 - **Spend chart** -- stacked bars by provider; daily for 7/30/90 days, weekly for 1 year
 - **Provider breakdown** -- dollars and share per provider for the selected range
 - **Model table** -- sortable by cost, model, or provider
-- **Sync** -- one button syncs every configured provider; schedule it with cron for daily data
+- **Sync now** -- runs the same refresh immediately
 - **Manual entries** -- `POST /api/entries/manual` for providers without a billing API
 - Dark theme, keyboard accessible
 
@@ -23,6 +25,11 @@ Pulls actual billed amounts from each provider's billing API. No proxies, no est
 | xAI / Grok | Management API (actual USD) | Management key + team ID |
 | Gemini | GCP BigQuery billing export | Service account + billing export enabled |
 | OpenRouter | Activity API | Management key |
+| Anthropic | Admin API (usage and cost) | Admin key (`ANTHROPIC_ADMIN_KEY`) |
+| fal.ai | Usage API | `FAL_API_KEY` |
+| BFL (Flux) | Credit balance, diffed between syncs | `BFL_API_KEY` |
+
+Plan quotas read from vendor APIs, both optional: ElevenLabs (`ELEVENLABS_API_KEY`, characters used against the plan) and Magic Hour (`MAGIC_HOUR_API_KEY`, credit balance).
 
 Each provider is optional. The dashboard works with any combination, including zero configured providers (manual entry only).
 
@@ -62,6 +69,17 @@ machines or the web apps shows up at the next local reading. Model-specific week
 and credit balances are not in either source.
 
 `npm test` runs the parser and status line tests.
+
+## Activity (local Claude Code and Codex logs)
+
+The scheduler indexes `~/.claude/projects` and `~/.claude-ss/projects` (override with
+`CLAUDE_PROJECTS_DIRS`, colon-separated) and `$CODEX_HOME/sessions` into local SQLite tables.
+Only changed files are re-read. Rows stay after Claude Code prunes old transcripts, so history
+accumulates from the first run. Nothing leaves the machine.
+
+Costs for Claude Code and Codex are estimates at API list prices (`src/lib/activity/pricing.ts`);
+unpriced models show no cost. Claude Code logs usage per message; Codex logs it only since
+September 2026, so older Codex sessions count toward tools and sessions but not tokens.
 
 ## Provider setup
 
@@ -181,8 +199,10 @@ pm2 restart api-costs   # restart after code changes
 2. Register it in `src/lib/providers/registry.ts`
 3. Add a `--provider-*` colour in `src/app/globals.css` and an entry in `PROVIDER_CONFIG` in
    `src/lib/format.ts`. The colours are validated as an ordered set (the chart stack order), so
-   re-check colour-blind separation when adding one. The chart picks the provider up automatically.
-4. Add env var check in `src/app/page.tsx`
+   re-check colour-blind separation when adding one. The chart, Sync now and the scheduler pick
+   the provider up automatically from the registry.
+4. Keep each entry's `model`, `date`, `direction` and `rawLineItem` stable across syncs: together
+   they are the dedup key, so a changed value inserts a new row instead of updating the old one.
 
 ## Tech stack
 

@@ -12,8 +12,10 @@
   --accent-amber: #fab219;
 
   /* Plan-limit meters: neutral fill, status colours only when near the limit */
-  --meter: #cfd0d8;
-  --meter-track: #2c2d38;
+  --meter: #e6e7ef;
+  --meter-track: #292a36;
+  --spark: #4d4f60; /* month-to-date bars other than today */
+  --tool-bar: #a0a3b9; /* ranked-list magnitude bars */
   --warning: #fab219; /* 9.3:1 on --card */
   --critical: #e66767; /* 5.3:1 on --card */
 
@@ -41,16 +43,18 @@
   --color-accent-amber: var(--accent-amber);
   --color-meter: var(--meter);
   --color-meter-track: var(--meter-track);
+  --color-tool-bar: var(--tool-bar);
   --color-warning: var(--warning);
   --color-critical: var(--critical);
-  --font-sans: var(--font-geist-sans);
+  --font-sans: var(--font-barlow);
+  --font-display: var(--font-barlow-sc);
   --font-mono: var(--font-geist-mono);
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: var(--font-geist-sans), system-ui, sans-serif;
+  font-family: var(--font-barlow), system-ui, sans-serif;
 }
 
 :focus-visible {
@@ -65,4 +69,71 @@ body {
     transition-duration: 0.01ms !important;
     animation-duration: 0.01ms !important;
   }
+}
+
+/* Header sync status dot. "live" pulses while a sync runs. */
+.live-dot {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 9999px;
+  background: var(--accent-green);
+  flex: none;
+}
+.live-dot--warn {
+  background: var(--warning);
+}
+.live-dot--live {
+  background: var(--accent-blue);
+  animation: live-pulse 1.2s ease-in-out infinite;
+}
+@keyframes live-pulse {
+  0%, 100% { opacity: 1; box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent-blue) 60%, transparent); }
+  50% { opacity: 0.6; box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent-blue) 0%, transparent); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .live-dot--live { animation: none; }
+}
+
+/* Plan limits: one instrument panel, plans separated by hairlines rather than boxed cards. */
+.plan-cluster {
+  display: flex;
+  flex-wrap: wrap;
+  background:
+    radial-gradient(120% 140% at 0% 0%, color-mix(in srgb, var(--meter) 5%, transparent), transparent 55%),
+    var(--card);
+  border: 1px solid var(--card-border);
+  border-radius: 1rem;
+}
+.plan-group {
+  padding: 1.25rem 1.5rem 1.5rem;
+  flex: 0 1 auto;
+}
+.plan-group + .plan-group {
+  border-left: 1px solid var(--card-border);
+}
+.gauge-slot {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  min-width: 8.25rem;
+}
+/* Soft glow in the gauge's own colour; `color` is set inline to the fill. */
+.gauge-fill {
+  filter: drop-shadow(0 0 6px color-mix(in srgb, currentColor 55%, transparent));
+}
+
+/* Tools used: four ranked lists in one panel, hairline-separated like the plan cluster. */
+.tools-panel {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  background: var(--card);
+  border: 1px solid var(--card-border);
+  border-radius: 0.75rem;
+}
+.tools-col {
+  padding: 1rem 1.25rem 1.25rem;
+  min-width: 0;
+}
+.tools-col + .tools-col {
+  border-left: 1px solid var(--card-border);
 }
