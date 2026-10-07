@@ -36,7 +36,7 @@ export type ActivityToolsSummary = {
   codex: ToolCount[];
 };
 
-export type SessionsByDay = { date: string; count: number };
+export type SessionsByDay = { date: string; source: string; count: number };
 
 export type ActivityTotals = {
   messages: number;
@@ -175,23 +175,24 @@ function getToolsUsed(start: string, end: string): ActivityToolsSummary {
 // bucket), and every other date in this file is Eastern via toEasternDate for consistency.
 function getSessionsByDay(start: string, end: string): SessionsByDay[] {
   const rows = db
-    .select({ startedAt: activitySessions.startedAt })
+    .select({ startedAt: activitySessions.startedAt, source: activitySessions.source })
     .from(activitySessions)
     .where(eq(activitySessions.isSubagent, 0))
     .all();
 
-  const counts = new Map<string, number>();
+  const counts = new Map<string, SessionsByDay>();
   for (const row of rows) {
     if (!row.startedAt) continue;
     const parsed = new Date(row.startedAt);
     if (Number.isNaN(parsed.getTime())) continue;
     const date = toEasternDate(parsed);
     if (date < start || date > end) continue;
-    counts.set(date, (counts.get(date) ?? 0) + 1);
+    const key = `${date}|${row.source}`;
+    const entry = counts.get(key) ?? { date, source: row.source, count: 0 };
+    entry.count++;
+    counts.set(key, entry);
   }
-  return [...counts.entries()]
-    .map(([date, count]) => ({ date, count }))
-    .sort((a, b) => a.date.localeCompare(b.date));
+  return [...counts.values()].sort((a, b) => a.date.localeCompare(b.date) || a.source.localeCompare(b.source));
 }
 
 function getDataStart(): { claude: string | null; codex: string | null } {

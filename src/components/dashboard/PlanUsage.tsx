@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import type { PlanUsage as PlanUsageType, QuotaWindow } from "@/lib/plans";
 import { applyReset, windowElapsed } from "@/lib/plans/parse";
 import { formatClockTime, formatDuration, formatRelativeTime } from "@/lib/format";
+import { WeekTrend } from "./WeekTrend";
 
 const REFRESH_MS = 60_000;
 const STALE_MS = 6 * 60 * 60 * 1000;
@@ -54,6 +55,7 @@ export function PlanUsage({ initial, serverNow }: Props) {
         {plans.map((plan) => (
           <PlanGroup key={plan.id} plan={plan} now={now} />
         ))}
+        <WeekTrend plans={plans} now={now} />
       </div>
     </section>
   );

@@ -111,6 +111,11 @@ body {
 .plan-group + .plan-group {
   border-left: 1px solid var(--card-border);
 }
+/* The weekly burn-up takes whatever width the gauges leave. */
+.plan-group--trend {
+  flex: 1 1 26rem;
+  min-width: 22rem;
+}
 .gauge-slot {
   display: flex;
   flex-direction: column;

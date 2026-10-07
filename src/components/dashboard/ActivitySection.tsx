@@ -91,7 +91,7 @@ export function ActivitySection({ year, initial, today, serverNow }: Props) {
 
       <div className="bg-card border border-card-border rounded-xl p-4 sm:p-5">
         <h3 className="text-sm font-medium mb-3">Messages per day, last 12 months</h3>
-        <ActivityHeatmap daily={year.daily} sessions={year.sessions} today={today} dataStart={start} />
+        <ActivityHeatmap daily={year.daily} sessions={year.sessions} today={today} dataStart={year.dataStart} />
       </div>
 
       {data && (

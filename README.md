@@ -6,9 +6,9 @@ Pulls actual billed amounts from each provider's billing API. No proxies, no est
 
 ## What it does
 
-- **Plan limits** -- Claude (Pro/Max) and ChatGPT Codex as dials per window, with reset times, a pace notch and a straight-line projection ("runs out Thu 2 PM")
+- **Plan limits** -- Claude (Pro/Max) and ChatGPT Codex as dials per window, with reset times, a pace notch and a straight-line projection ("runs out Thu 2 PM"), plus a burn-up chart of each weekly limit against even pace (needs the optional `history.jsonl` quota log in `~/.local/state/ai-usage/`)
 - **Spend summary** -- this month with daily bars and the change against last month at the same point, a month-end projection, last 30 days, this week, this year
-- **Activity** -- from the Claude Code and Codex logs on this machine: sessions, messages, a 12-month heatmap, MCP servers (with per-tool counts), skills, subagents and built-in tools, and every model used with tokens and its cost at API list prices
+- **Activity** -- from the Claude Code and Codex logs on this machine: sessions, messages, a 12-month heatmap per tool (Claude Code and Codex, each on its own scale), MCP servers (with per-tool counts), skills, subagents and built-in tools, and every model used with tokens and its cost at API list prices
 - **Auto-sync** -- the server syncs every provider, refreshes quotas and indexes local logs every 30 minutes (`AUTO_SYNC_MINUTES`, 0 turns it off); the page refreshes itself every 2 minutes
 - **Spend chart** -- stacked bars by provider; daily for 7/30/90 days, weekly for 1 year
 - **Provider breakdown** -- dollars and share per provider for the selected range
