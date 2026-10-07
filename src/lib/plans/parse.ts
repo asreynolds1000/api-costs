@@ -10,18 +10,16 @@ export type QuotaWindow = {
   resetsAt: number | null; // epoch seconds
   updatedAt: string | null; // ISO time the reading was taken (Codex) or last changed (Claude)
   reset: boolean;
-  detail?: string; // e.g. "2,382 of 10,000 characters"
 };
 
 export type PlanUsage = {
-  id: "claude" | "codex" | "elevenlabs" | "magichour";
+  id: "claude" | "codex";
   name: string;
   status: "ok" | "missing" | "error";
   message?: string;
   note?: string;
   windows: QuotaWindow[];
   updatedAt: string | null; // newest reading across windows
-  balance?: { label: string; value: string }; // for credit-balance plans with no limit
 };
 
 export function windowLabel(minutes: number): string {
@@ -112,6 +110,47 @@ export function codexWindows(s: CodexSnapshot, nowSec: number): QuotaWindow[] {
         nowSec
       )
     )
+    .sort((a, b) => a.windowMinutes - b.windowMinutes);
+}
+
+// A separate quota probe (ai-quota) calls `codex app-server` directly and records the plan windows
+// to codex-rate-limits.json, keyed by window length in minutes. Unlike the session logs, it
+// stays current when Codex runs elsewhere on the same account. Times are epoch seconds.
+
+type AiQuotaWindowRaw = {
+  used_percentage?: number;
+  resets_at?: number;
+  observed_at?: number;
+  rejected?: boolean;
+};
+
+export type AiQuotaCodexState = {
+  windows?: Record<string, AiQuotaWindowRaw | undefined>;
+};
+
+export function aiQuotaCodexWindows(state: AiQuotaCodexState, nowSec: number): QuotaWindow[] {
+  return Object.entries(state.windows ?? {})
+    .flatMap(([key, w]) => {
+      const minutes = Number(key);
+      if (!w || !Number.isInteger(minutes) || minutes <= 0) return [];
+      // ai-quota counts a rejected probe as the limit being hit
+      const used = w.rejected ? 100 : typeof w.used_percentage === "number" ? w.used_percentage : null;
+      return [
+        applyReset(
+          {
+            key: `codex:${minutes}`,
+            label: windowLabel(minutes),
+            windowMinutes: minutes,
+            usedPercent: used,
+            resetsAt: typeof w.resets_at === "number" ? w.resets_at : null,
+            updatedAt:
+              typeof w.observed_at === "number" ? new Date(w.observed_at * 1000).toISOString() : null,
+            reset: false,
+          },
+          nowSec
+        ),
+      ];
+    })
     .sort((a, b) => a.windowMinutes - b.windowMinutes);
 }
 

@@ -6,6 +6,7 @@ import { mkdtempSync, readFileSync, writeFileSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
+  aiQuotaCodexWindows,
   findLatestCodexSnapshot,
   codexWindows,
   claudeWindows,
@@ -63,6 +64,23 @@ test("codex: a window whose reset has passed reports unknown usage, not the stal
 
 test("codex: no plan snapshot returns null", () => {
   assert.equal(findLatestCodexSnapshot([spark, premium, nullSnapshot].join("\n")), null);
+});
+
+// Shape ai-quota writes to codex-rate-limits.json (2026-10), trimmed.
+test("codex: ai-quota windows are keyed by length, with reset and rejected handling", () => {
+  const state = {
+    consecutive_failures: 0,
+    windows: {
+      "10080": { observed_at: 1791330905, rejected: false, resets_at: 1791726542, used_percentage: 6.0 },
+      "300": { observed_at: 1791330905, rejected: true, resets_at: 1791340000, used_percentage: 40.0 },
+      bogus: { used_percentage: 1 },
+    },
+  };
+  const ws = aiQuotaCodexWindows(state, 1791331000);
+  assert.deepEqual(ws.map((w) => [w.label, w.usedPercent]), [["5-hour", 100], ["Weekly", 6]]);
+  assert.equal(ws[1].updatedAt, new Date(1791330905 * 1000).toISOString());
+  assert.equal(aiQuotaCodexWindows(state, 1791726543)[1].reset, true);
+  assert.deepEqual(aiQuotaCodexWindows({}, 1791331000), []);
 });
 
 test("pace: elapsed fraction of the window", () => {

@@ -1,6 +1,5 @@
 import { getClaudeUsage } from "./claude";
 import { getCodexUsage } from "./codex";
-import { getQuotaPlans } from "./quotas";
 import type { PlanUsage } from "./parse";
 
 export type { PlanUsage, QuotaWindow } from "./parse";
@@ -24,6 +23,5 @@ export function getPlanUsage(): PlanUsage[] {
   return [
     safely("claude", "Claude Max", getClaudeUsage),
     safely("codex", "ChatGPT Codex", getCodexUsage),
-    ...getQuotaPlans(),
   ];
 }

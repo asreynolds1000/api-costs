@@ -82,12 +82,6 @@ function PlanGroup({ plan, now }: { plan: PlanUsageType; now: number }) {
           {plan.windows.map((w) => (
             <Gauge key={w.key} window={w} now={now} />
           ))}
-          {plan.balance && (
-            <div className="gauge-slot justify-center">
-              <p className="font-display text-5xl font-semibold leading-none">{plan.balance.value}</p>
-              <p className="text-sm text-muted mt-2">{plan.balance.label}</p>
-            </div>
-          )}
         </div>
       )}
 
@@ -197,7 +191,6 @@ function Gauge({ window: reading, now }: { window: QuotaWindow; now: number }) {
           {level === "critical" ? "Near the limit" : "Getting close"}
         </p>
       ) : null}
-      {w.detail && <p className="text-xs text-muted mt-2">{w.detail}</p>}
       {resetText && <p className="text-xs text-muted mt-1.5 max-w-44">{resetText}</p>}
       {pace && <p className={`text-xs mt-1 max-w-44 ${pace.warn ? "text-warning" : "text-muted"}`}>{pace.text}</p>}
     </div>

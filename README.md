@@ -1,12 +1,12 @@
 # AI Usage Dashboard
 
-Track AI API spending across OpenAI, Anthropic, xAI/Grok, Google Gemini, OpenRouter, fal.ai and BFL, subscription limits for Claude, ChatGPT Codex, ElevenLabs and Magic Hour, and what you actually used in Claude Code and Codex (tools, skills, subagents, models), in a single dashboard.
+Track AI API spending across OpenAI, Anthropic, xAI/Grok, Google Gemini, OpenRouter, fal.ai and BFL, subscription limits for Claude and ChatGPT Codex, and what you actually used in Claude Code and Codex (tools, skills, subagents, models), in a single dashboard.
 
 Pulls actual billed amounts from each provider's billing API. No proxies, no estimations from token counts. Runs locally with SQLite storage.
 
 ## What it does
 
-- **Plan limits** -- Claude (Pro/Max), ChatGPT Codex and ElevenLabs as dials per window, with reset times, a pace notch and a straight-line projection ("runs out Thu 2 PM"); Magic Hour credit balance
+- **Plan limits** -- Claude (Pro/Max) and ChatGPT Codex as dials per window, with reset times, a pace notch and a straight-line projection ("runs out Thu 2 PM")
 - **Spend summary** -- this month with daily bars and the change against last month at the same point, a month-end projection, last 30 days, this week, this year
 - **Activity** -- from the Claude Code and Codex logs on this machine: sessions, messages, a 12-month heatmap, MCP servers (with per-tool counts), skills, subagents and built-in tools, and every model used with tokens and its cost at API list prices
 - **Auto-sync** -- the server syncs every provider, refreshes quotas and indexes local logs every 30 minutes (`AUTO_SYNC_MINUTES`, 0 turns it off); the page refreshes itself every 2 minutes
@@ -28,8 +28,6 @@ Pulls actual billed amounts from each provider's billing API. No proxies, no est
 | Anthropic | Admin API (usage and cost) | Admin key (`ANTHROPIC_ADMIN_KEY`) |
 | fal.ai | Usage API | `FAL_API_KEY` |
 | BFL (Flux) | Credit balance, diffed between syncs | `BFL_API_KEY` |
-
-Plan quotas read from vendor APIs, both optional: ElevenLabs (`ELEVENLABS_API_KEY`, characters used against the plan) and Magic Hour (`MAGIC_HOUR_API_KEY`, credit balance).
 
 Each provider is optional. The dashboard works with any combination, including zero configured providers (manual entry only).
 
@@ -53,7 +51,7 @@ Both sources are local files; no API keys or network calls.
 
 | Plan | Source | Windows |
 |------|--------|---------|
-| ChatGPT Codex | Rate-limit snapshots Codex writes to `~/.codex/sessions/**/rollout-*.jsonl` (override with `CODEX_HOME`) | Whatever the plan reports, e.g. weekly, or 5-hour + weekly |
+| ChatGPT Codex | Rate-limit snapshots Codex writes to `~/.codex/sessions/**/rollout-*.jsonl` (override with `CODEX_HOME`), or a direct probe recorded to `~/.local/state/ai-usage/codex-rate-limits.json` if one exists; the newer reading wins | Whatever the plan reports, e.g. weekly, or 5-hour + weekly |
 | Claude (Pro/Max) | `scripts/claude-statusline.sh`, run as the Claude Code status line, records the `rate_limits` field to `~/.local/state/ai-usage/claude-rate-limits.json` (override with `CLAUDE_USAGE_STATE`) | 5-hour and weekly |
 
 To enable the Claude side, add to your Claude Code settings (use an absolute path, and repeat

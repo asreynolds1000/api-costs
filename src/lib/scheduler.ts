@@ -1,9 +1,8 @@
 import { syncAll, type SyncResult } from "@/lib/sync";
-import { refreshQuotas } from "@/lib/plans/quotas";
 import { indexActivity } from "@/lib/activity/indexer";
 
-// One background loop in the pm2 process: sync every configured provider, refresh the
-// vendor quotas, then index local Claude Code and Codex logs.
+// One background loop in the pm2 process: sync every configured provider, then index
+// local Claude Code and Codex logs.
 // Started from src/instrumentation.ts. AUTO_SYNC_MINUTES=0 turns it off.
 
 export type SchedulerState = {
@@ -59,8 +58,6 @@ export function startScheduler() {
   const s = state();
   if (s.started || !s.enabled) return;
   s.started = true;
-  // Quotas are cheap and the page shows "waiting" until the first reading, so fetch them now
-  void refreshQuotas().catch(() => {});
   scheduleNext(BOOT_DELAY_MS);
 }
 
@@ -77,7 +74,6 @@ export function runTick(): Promise<SyncResult[]> {
     try {
       results = await syncAll();
       ok = results.every((r) => r.ok);
-      await refreshQuotas();
       const indexed = await indexActivity();
       if (indexed.errors.length) {
         ok = false;
