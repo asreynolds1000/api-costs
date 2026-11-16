@@ -1,40 +1,19 @@
-import type { ProviderAdapter, CostEntry } from "./types";
+import type { ProviderAdapter, CostEntry, SyncWindow } from "./types";
 import { toEasternDate } from "../timezone";
+import { collectCostReport } from "./anthropic-parse";
 
 // Anthropic Usage & Cost Admin API.
 // Requires an Admin API key (sk-ant-admin01-...), NOT a standard API key.
 // Cost amounts are returned as decimal strings in the lowest unit (cents),
-// so costUsd = Number(amount) / 100.
+// so costUsd = Number(amount) / 100. Parsing and paging: ./anthropic-parse.ts.
 // Docs: https://platform.claude.com/docs/en/api/usage-cost-api
 //
 // NOTE: Anthropic org-level cost data only exists for metered pay-as-you-go
-// API usage. Subscription/Max usage does not appear here, so sync() will return
-// an empty array (cleanly) until the org has billable API spend.
+// API usage. Subscription/Max usage does not appear here, so a sync covering
+// days with no API use correctly returns no entries.
 
 const BASE = "https://api.anthropic.com/v1/organizations/cost_report";
 const VERSION = "2023-06-01";
-
-type AnthropicCostResult = {
-  amount?: string | number;
-  currency?: string;
-  description?: string | null;
-  model?: string | null;
-  cost_type?: string | null;
-  token_type?: string | null;
-  workspace_id?: string | null;
-};
-
-type AnthropicCostBucket = {
-  starting_at: string;
-  ending_at: string;
-  results: AnthropicCostResult[];
-};
-
-type AnthropicCostResponse = {
-  data: AnthropicCostBucket[];
-  has_more?: boolean;
-  next_page?: string | null;
-};
 
 export class AnthropicAdapter implements ProviderAdapter {
   provider = "anthropic";
@@ -71,17 +50,25 @@ export class AnthropicAdapter implements ProviderAdapter {
   }
 
   async sync(since: Date): Promise<CostEntry[]> {
+    return (await this.syncWindow(since)).entries;
+  }
+
+  async syncWindow(since: Date): Promise<{ entries: CostEntry[]; window: SyncWindow | null }> {
     if (!this.isConfigured()) throw new Error("ANTHROPIC_ADMIN_KEY not set");
 
-    const entries: CostEntry[] = [];
-    const startingAt = since.toISOString();
+    // Whole UTC days only: a window starting mid-day could return a partial first bucket, and
+    // the window replace would swap that day's full rows for partial totals.
+    const start = new Date(since);
+    start.setUTCHours(0, 0, 0, 0);
+    const startingAt = start.toISOString();
     const endingAt = new Date().toISOString();
-    let page: string | undefined;
 
-    do {
+    return collectCostReport(async (page) => {
       const params = new URLSearchParams({
         starting_at: startingAt,
         ending_at: endingAt,
+        // 31 daily buckets per page (the default is 7), so 90 days is 3 requests, not 13
+        limit: "31",
       });
       // group by description so results carry parsed model / cost_type fields
       params.append("group_by[]", "description");
@@ -92,28 +79,7 @@ export class AnthropicAdapter implements ProviderAdapter {
         const text = await res.text();
         throw new Error(`Anthropic API error ${res.status}: ${text.slice(0, 500)}`);
       }
-
-      const data: AnthropicCostResponse = await res.json();
-
-      for (const bucket of data.data ?? []) {
-        const date = toEasternDate(new Date(bucket.starting_at));
-        for (const result of bucket.results ?? []) {
-          const cents = Number(result.amount ?? 0);
-          if (!cents) continue; // skip empty/zero line items
-          entries.push({
-            provider: "anthropic",
-            model: result.model ?? result.description ?? "anthropic",
-            date,
-            costUsd: cents / 100, // amounts are in cents
-            unitType: result.cost_type === "web_search" ? "requests" : "tokens",
-            rawLineItem: result.description ?? result.cost_type ?? undefined,
-          });
-        }
-      }
-
-      page = data.next_page ?? undefined;
-    } while (page);
-
-    return entries;
+      return res.json();
+    }, toEasternDate);
   }
 }

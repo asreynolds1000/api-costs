@@ -1,8 +1,9 @@
 import { eq } from "drizzle-orm";
 import { getAdapter, getAllAdapters } from "@/lib/providers/registry";
-import type { CostEntry, ProviderState } from "@/lib/providers/types";
+import type { CostEntry, ProviderState, SyncWindow } from "@/lib/providers/types";
 import { logSync } from "@/lib/db/queries";
-import { db, schema } from "@/lib/db";
+import { db, schema, sqlite } from "@/lib/db";
+import { checkWindowReplace, clearSyncedWindow, countSyncedWindow } from "@/lib/db/sync-window";
 import { dedupKey } from "@/lib/providers/normalize";
 
 export type SyncResult = { provider: string; ok: boolean; records: number; error?: string };
@@ -18,10 +19,13 @@ const g = globalThis as unknown as { __syncInFlight?: Map<string, Promise<SyncRe
 const inFlight = (g.__syncInFlight ??= new Map());
 
 // A second caller for the same provider waits on the running sync instead of starting another.
-export function syncProvider(provider: string): Promise<SyncResult> {
+// `days` is for a one-off backfill; the scheduler and Sync now use the default. It is an
+// options object, not a second positional argument, so `providers.map(syncProvider)` fails to
+// type-check instead of passing each array index as the lookback.
+export function syncProvider(provider: string, { days = SYNC_DAYS }: { days?: number } = {}): Promise<SyncResult> {
   const running = inFlight.get(provider);
   if (running) return running;
-  const job = runSync(provider).finally(() => inFlight.delete(provider));
+  const job = runSync(provider, days).finally(() => inFlight.delete(provider));
   inFlight.set(provider, job);
   return job;
 }
@@ -30,13 +34,13 @@ export async function syncAll(): Promise<SyncResult[]> {
   const providers = getAllAdapters()
     .filter((a) => a.isConfigured())
     .map((a) => a.provider);
-  const settled = await Promise.allSettled(providers.map(syncProvider));
+  const settled = await Promise.allSettled(providers.map((p) => syncProvider(p)));
   return settled.map((s, i) =>
     s.status === "fulfilled" ? s.value : { provider: providers[i], ok: false, records: 0, error: String(s.reason) }
   );
 }
 
-async function runSync(provider: string): Promise<SyncResult> {
+async function runSync(provider: string, days: number): Promise<SyncResult> {
   const adapter = getAdapter(provider);
   if (!adapter) return { provider, ok: false, records: 0, error: `Unknown provider: ${provider}` };
   if (!adapter.isConfigured()) {
@@ -45,19 +49,24 @@ async function runSync(provider: string): Promise<SyncResult> {
 
   try {
     const since = new Date();
-    since.setDate(since.getDate() - SYNC_DAYS);
+    since.setDate(since.getDate() - days);
 
     let entries: CostEntry[];
     let nextState: ProviderState | undefined;
+    let window: SyncWindow | null = null;
     if (adapter.syncWithState) {
       const out = await withTimeout(adapter.syncWithState(since, readState(provider)), provider);
       entries = out.entries;
       nextState = out.state;
+    } else if (adapter.syncWindow) {
+      const out = await withTimeout(adapter.syncWindow(since), provider);
+      entries = out.entries;
+      window = out.window;
     } else {
       entries = await withTimeout(adapter.sync(since), provider);
     }
 
-    const records = writeEntries(provider, entries, nextState);
+    const records = writeEntries(provider, entries, nextState, window);
     logSync(provider, "success", records);
     return { provider, ok: true, records };
   } catch (err) {
@@ -88,10 +97,20 @@ function readState(provider: string): ProviderState {
 }
 
 // Entries and any adapter state commit together, so a crash can't record the new BFL
-// balance without the spend row that came from it (or the reverse).
-function writeEntries(provider: string, entries: CostEntry[], nextState?: ProviderState): number {
+// balance without the spend row that came from it (or the reverse). With a window, the
+// provider's synced rows for those dates are replaced in the same transaction.
+function writeEntries(
+  provider: string,
+  entries: CostEntry[],
+  nextState?: ProviderState,
+  window?: SyncWindow | null
+): number {
   const now = new Date().toISOString();
   db.transaction((tx) => {
+    if (window) {
+      checkWindowReplace(entries.length, countSyncedWindow(sqlite, provider, window), window);
+      clearSyncedWindow(sqlite, provider, window);
+    }
     for (const entry of entries) {
       const { direction, rawLineItem } = dedupKey(entry);
       tx.insert(schema.costEntries)

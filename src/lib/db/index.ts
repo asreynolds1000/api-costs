@@ -23,4 +23,7 @@ function getDatabase() {
 }
 
 export const db = drizzle(getDatabase(), { schema });
+// The raw handle, for plain-SQL helpers that tests load without Drizzle. Drizzle's
+// better-sqlite3 transactions run on this same connection, so they can be called inside one.
+export const sqlite = getDatabase();
 export { schema };
