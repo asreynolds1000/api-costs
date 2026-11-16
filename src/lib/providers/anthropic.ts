@@ -56,7 +56,11 @@ export class AnthropicAdapter implements ProviderAdapter {
   async syncWindow(since: Date): Promise<{ entries: CostEntry[]; window: SyncWindow | null }> {
     if (!this.isConfigured()) throw new Error("ANTHROPIC_ADMIN_KEY not set");
 
-    const startingAt = since.toISOString();
+    // Whole UTC days only: a window starting mid-day could return a partial first bucket, and
+    // the window replace would swap that day's full rows for partial totals.
+    const start = new Date(since);
+    start.setUTCHours(0, 0, 0, 0);
+    const startingAt = start.toISOString();
     const endingAt = new Date().toISOString();
 
     return collectCostReport(async (page) => {

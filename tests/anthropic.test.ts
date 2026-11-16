@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import Database from "better-sqlite3";
 import { parseCostPage, collectCostReport } from "../src/lib/providers/anthropic-parse.ts";
-import { clearSyncedWindow } from "../src/lib/db/sync-window.ts";
+import { checkWindowReplace, clearSyncedWindow, countSyncedWindow } from "../src/lib/db/sync-window.ts";
 import { dedupKey } from "../src/lib/providers/normalize.ts";
 import { toEasternDate } from "../src/lib/timezone.ts";
 
@@ -145,4 +145,24 @@ test("anthropic: a line item the provider stops reporting is removed on the next
   write([after]);
   clearSyncedWindow(db, "anthropic", { from: "2026-08-08", to: "2026-08-08" }); // day now reports nothing
   assert.equal(rows().length, 0);
+});
+
+test("anthropic: an empty response over stored rows fails instead of clearing them", () => {
+  const { db, write, rows } = tempTable();
+  write([after, { date: "2026-08-07", line: "invoice", cost: 5, source: "manual" }]);
+  const window = { from: "2026-08-01", to: "2026-08-21" };
+  const stored = countSyncedWindow(db, "anthropic", window);
+  assert.equal(stored, 1); // manual rows are not counted
+  assert.throws(() => checkWindowReplace(0, stored, window), /Refusing to clear 1 synced rows/);
+  assert.equal(rows().length, 2);
+});
+
+test("anthropic: an empty response over an empty window is fine", () => {
+  const { db } = tempTable();
+  const window = { from: "2026-10-01", to: "2026-11-15" };
+  assert.doesNotThrow(() => checkWindowReplace(0, countSyncedWindow(db, "anthropic", window), window));
+});
+
+test("anthropic: a response with lines may replace stored rows", () => {
+  assert.doesNotThrow(() => checkWindowReplace(3, 7, { from: "2026-08-01", to: "2026-08-21" }));
 });

@@ -3,7 +3,7 @@ import { getAdapter, getAllAdapters } from "@/lib/providers/registry";
 import type { CostEntry, ProviderState, SyncWindow } from "@/lib/providers/types";
 import { logSync } from "@/lib/db/queries";
 import { db, schema, sqlite } from "@/lib/db";
-import { clearSyncedWindow } from "@/lib/db/sync-window";
+import { checkWindowReplace, clearSyncedWindow, countSyncedWindow } from "@/lib/db/sync-window";
 import { dedupKey } from "@/lib/providers/normalize";
 
 export type SyncResult = { provider: string; ok: boolean; records: number; error?: string };
@@ -19,8 +19,10 @@ const g = globalThis as unknown as { __syncInFlight?: Map<string, Promise<SyncRe
 const inFlight = (g.__syncInFlight ??= new Map());
 
 // A second caller for the same provider waits on the running sync instead of starting another.
-// `days` is for a one-off backfill; the scheduler and Sync now use the default.
-export function syncProvider(provider: string, days = SYNC_DAYS): Promise<SyncResult> {
+// `days` is for a one-off backfill; the scheduler and Sync now use the default. It is an
+// options object, not a second positional argument, so `providers.map(syncProvider)` fails to
+// type-check instead of passing each array index as the lookback.
+export function syncProvider(provider: string, { days = SYNC_DAYS }: { days?: number } = {}): Promise<SyncResult> {
   const running = inFlight.get(provider);
   if (running) return running;
   const job = runSync(provider, days).finally(() => inFlight.delete(provider));
@@ -32,7 +34,7 @@ export async function syncAll(): Promise<SyncResult[]> {
   const providers = getAllAdapters()
     .filter((a) => a.isConfigured())
     .map((a) => a.provider);
-  const settled = await Promise.allSettled(providers.map(syncProvider));
+  const settled = await Promise.allSettled(providers.map((p) => syncProvider(p)));
   return settled.map((s, i) =>
     s.status === "fulfilled" ? s.value : { provider: providers[i], ok: false, records: 0, error: String(s.reason) }
   );
@@ -105,7 +107,10 @@ function writeEntries(
 ): number {
   const now = new Date().toISOString();
   db.transaction((tx) => {
-    if (window) clearSyncedWindow(sqlite, provider, window);
+    if (window) {
+      checkWindowReplace(entries.length, countSyncedWindow(sqlite, provider, window), window);
+      clearSyncedWindow(sqlite, provider, window);
+    }
     for (const entry of entries) {
       const { direction, rawLineItem } = dedupKey(entry);
       tx.insert(schema.costEntries)
