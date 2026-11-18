@@ -1,7 +1,7 @@
 // Mac Mini log copy (mini-mirror.ts) and the daily database backup (backup.ts).
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { lastMirrorAt, mirrorMini, MINI_DIRS, type Runner } from "../src/lib/activity/mini-mirror.ts";
@@ -45,7 +45,7 @@ const fakeDeps = (dir: string, today: string) => ({
   dir,
   today,
   snapshot: async (dest: string) => writeFileSync(dest, "db"),
-  encrypt: async (src: string, dest: string) => writeFileSync(dest, `enc(${src})`),
+  encrypt: async (src: string, dest: string) => writeFileSync(dest, `enc(${src})`.padEnd(2048, ".")),
 });
 
 test("backup: writes today's encrypted copy, then skips when it already exists", async () => {
@@ -56,7 +56,34 @@ test("backup: writes today's encrypted copy, then skips when it already exists",
   assert.deepEqual(readdirSync(dir), ["costs-2026-11-17.sqlite.age"]);
   const again = await backupDaily(fakeDeps(dir, "2026-11-17"));
   assert.equal(again.skipped, true);
-  assert.equal(newestBackupDate(dir), "2026-11-17");
+  assert.equal(await newestBackupDate(dir), "2026-11-17");
+});
+
+test("backup: clears a .partial left by a crash, and an old plaintext snapshot in the work folder", async () => {
+  const root = tmp();
+  const dir = join(root, "api-costs");
+  const work = join(root, "work");
+  mkdirSync(dir, { recursive: true });
+  mkdirSync(join(work, "api-costs-backup-stale"), { recursive: true });
+  writeFileSync(join(work, "api-costs-backup-stale", "costs.sqlite"), "plaintext");
+  const old = new Date(Date.now() - 2 * 60 * 60_000);
+  utimesSync(join(work, "api-costs-backup-stale"), old, old);
+  writeFileSync(join(dir, "costs-2026-11-16.sqlite.age.partial"), "half");
+  const r = await backupDaily({ ...fakeDeps(dir, "2026-11-17"), workRoot: work });
+  assert.equal(r.ok, true);
+  assert.deepEqual(readdirSync(dir), ["costs-2026-11-17.sqlite.age"]);
+  assert.deepEqual(readdirSync(work), [], "stale snapshot and this run's work folder are both gone");
+});
+
+test("backup: a stub left where today's copy should be is replaced, not trusted", async () => {
+  const dir = join(tmp(), "api-costs");
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, "costs-2026-11-17.sqlite.age"), "");
+  const big = "x".repeat(4096);
+  const r = await backupDaily({ ...fakeDeps(dir, "2026-11-17"), encrypt: async (_s: string, dest: string) => writeFileSync(dest, big) });
+  assert.equal(r.ok, true);
+  assert.equal(r.skipped, false);
+  assert.equal(readFileSync(join(dir, "costs-2026-11-17.sqlite.age"), "utf8").length, 4096);
 });
 
 test("backup: a missing parent folder (Drive not mounted) is an error, and nothing is created", async () => {
@@ -80,7 +107,7 @@ test("backup: a failed encrypt leaves no file behind, so the next run retries", 
   assert.deepEqual(readdirSync(dir), []);
 });
 
-test("backup: pruning keeps the newest 14 plus the oldest copy of each earlier month", () => {
+test("backup: pruning keeps the newest 14 plus the oldest copy of each earlier month", async () => {
   const dir = tmp();
   mkdirSync(dir, { recursive: true });
   const days: string[] = [];
@@ -89,7 +116,7 @@ test("backup: pruning keeps the newest 14 plus the oldest copy of each earlier m
   }
   for (const day of days) writeFileSync(join(dir, `costs-${day}.sqlite.age`), "x");
   writeFileSync(join(dir, "notes.txt"), "not a backup");
-  pruneBackups(dir, 14);
+  await pruneBackups(dir, 14);
   const left = readdirSync(dir).filter((f) => f.endsWith(".age")).map((f) => f.slice(6, 16)).sort();
   assert.deepEqual(left, ["2026-09-20", "2026-10-01", "2026-11-01", ...days.slice(-14)]);
   assert.ok(existsSync(join(dir, "notes.txt")), "other files are left alone");

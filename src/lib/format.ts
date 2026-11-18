@@ -70,7 +70,10 @@ const dayClockFmt = new Intl.DateTimeFormat("en-US", {
 // "1:00 PM" within the next 20 hours, otherwise "Thu 11:00 PM"
 export function formatClockTime(epochSec: number, nowSec: number): string {
   const d = new Date(epochSec * 1000);
-  return Math.abs(epochSec - nowSec) < 20 * 3600 ? clockFmt.format(d) : dayClockFmt.format(d);
+  const s = Math.abs(epochSec - nowSec) < 20 * 3600 ? clockFmt.format(d) : dayClockFmt.format(d);
+  // Newer ICU puts a narrow no-break space (U+202F) before AM/PM and older ICU a plain space;
+  // normalize so the server's HTML matches the browser's render whatever ICU each has.
+  return s.replace(/[\u202f\u00a0]/g, " ");
 }
 
 // "12m", "2h 10m", "6d 5h"

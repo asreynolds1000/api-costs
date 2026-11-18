@@ -22,7 +22,7 @@ const TIMEOUT_MS = 2 * 60_000;
 const OK_CODES = new Set([0, 24]);
 
 export function miniMirrorDir(): string {
-  return process.env.MINI_MIRROR_DIR || join(homedir(), ".local", "state", "ai-usage", "mini");
+  return process.env.MINI_MIRROR_DIR || join(/*turbopackIgnore: true*/ homedir(), ".local", "state", "ai-usage", "mini");
 }
 
 export type Runner = (cmd: string, args: string[], timeoutMs: number) => Promise<{ code: number; stderr: string }>;
@@ -46,21 +46,21 @@ export async function mirrorMini(run: Runner = execRunner, dir = miniMirrorDir()
   const host = process.env.MINI_HOST || "mac-mini";
   const errors: string[] = [];
   for (const d of MINI_DIRS) {
-    const local = join(dir, d.local);
+    const local = join(/*turbopackIgnore: true*/ dir, d.local);
     mkdirSync(local, { recursive: true });
     const args = ["-a", "-e", "ssh -o BatchMode=yes -o ConnectTimeout=10", `${host}:${d.remote}/`, `${local}/`];
     const { code, stderr } = await run("rsync", args, TIMEOUT_MS);
     if (!OK_CODES.has(code)) errors.push(`${d.remote}: rsync exit ${code}: ${stderr.trim().split("\n").at(-1) ?? ""}`);
   }
   const ok = errors.length === 0;
-  if (ok) writeFileSync(join(dir, LAST_OK_FILE), new Date().toISOString());
+  if (ok) writeFileSync(join(/*turbopackIgnore: true*/ dir, LAST_OK_FILE), new Date().toISOString());
   return { ok, skipped: false, errors, ms: Date.now() - startedAt };
 }
 
 // ISO time of the last copy where every folder succeeded, or null if there has never been one.
 export function lastMirrorAt(dir = miniMirrorDir()): string | null {
   try {
-    return readFileSync(join(dir, LAST_OK_FILE), "utf8").trim() || null;
+    return readFileSync(join(/*turbopackIgnore: true*/ dir, LAST_OK_FILE), "utf8").trim() || null;
   } catch {
     return null;
   }

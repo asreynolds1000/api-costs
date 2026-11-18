@@ -86,6 +86,7 @@ count in every total, and show separately in the heatmap tooltip. Runs started w
 `DB_BACKUP_DIR` as `costs-YYYY-MM-DD.sqlite.age`, encrypted to the public key in
 `BACKUP_AGE_RECIPIENT_FILE`. It keeps the newest 14 plus the oldest copy of each earlier month.
 Both settings are required; the Activity header says when a backup or a copy is overdue.
+`ACTIVITY_NOTE` adds a sentence to that header for caveats about your own history.
 
 Costs for Claude Code and Codex are estimates at API list prices (`src/lib/activity/pricing.ts`);
 unpriced models show no cost. Claude Code logs usage per message; Codex logs it only since

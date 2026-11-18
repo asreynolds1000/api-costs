@@ -284,6 +284,11 @@ async function runIndexActivity(opts?: IndexOptions): Promise<IndexResult> {
     if (prev && prev.size === stat.size && prev.mtimeMs === mtime) {
       continue; // unchanged since the last run
     }
+    // Transcripts only grow. A Mac Mini copy that shrank (a truncated write on the Mini, copied
+    // over the mirror) would replace this file's rows with fewer, so keep the rows it already has.
+    if (prev && entry.key.startsWith("mini:") && stat.size < prev.size) {
+      continue;
+    }
 
     try {
       const result = await parseFile(entry);

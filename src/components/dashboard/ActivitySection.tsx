@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import type { ActivityResult } from "@/lib/activity/queries";
 import type { CaptureStatus } from "@/lib/capture";
-import { ACTIVITY_DEFAULT_DAYS as DEFAULT_DAYS, formatCompact, formatCurrency, formatInt } from "@/lib/format";
+import { ACTIVITY_DEFAULT_DAYS as DEFAULT_DAYS, formatClockTime, formatCompact, formatCurrency, formatInt } from "@/lib/format";
 import { shiftDate } from "@/lib/timezone";
 import { DateRangePicker } from "./DateRangePicker";
 import { ActivityHeatmap } from "./ActivityHeatmap";
@@ -20,7 +20,6 @@ type Props = {
 };
 
 const monthDay = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
-const clock = new Intl.DateTimeFormat("en-US", { hour: "numeric", minute: "2-digit", timeZone: "America/New_York" });
 const MINI_STALE_MS = 2 * 60 * 60 * 1000; // the copy runs every 30 minutes
 
 // One line each for the Mac Mini copy and the database backup, amber when they need a look.
@@ -30,7 +29,7 @@ function captureNotes({ mini, backup }: CaptureStatus, today: string, serverNow:
     if (!mini.copiedAt) notes.push({ text: "Mac Mini logs not copied yet", warn: true });
     else {
       const at = new Date(mini.copiedAt);
-      const when = mini.copiedAt.slice(0, 10) === new Date(serverNow).toISOString().slice(0, 10) ? clock.format(at) : monthDay.format(at);
+      const when = formatClockTime(Math.floor(at.getTime() / 1000), Math.floor(serverNow / 1000));
       notes.push({
         text: `Mac Mini logs copied ${when}${mini.error ? " (last try failed)" : ""}`,
         warn: !!mini.error || serverNow - at.getTime() > MINI_STALE_MS,
@@ -38,6 +37,7 @@ function captureNotes({ mini, backup }: CaptureStatus, today: string, serverNow:
     }
   }
   if (!backup.configured) notes.push({ text: "Database backup not set up", warn: true });
+  else if (backup.date === undefined) notes.push({ text: "Checking the database backup", warn: false });
   else if (!backup.date) notes.push({ text: "No database backup yet", warn: true });
   else
     notes.push({
@@ -99,9 +99,9 @@ export function ActivitySection({ year, initial, today, serverNow, capture }: Pr
             Activity
           </h2>
           <p className="text-xs text-muted mt-0.5">
-            Claude Code and Codex on this Mac and the Mac Mini, plus every API model.
-            {start ? ` Claude Code history starts ${monthDay.format(new Date(`${start}T12:00:00Z`))} and is partial before Sep 4.` : ""}
-            {" "}A few scheduled Mini jobs keep no transcript, so Mini figures run slightly low.
+            Claude Code and Codex on this Mac{capture.mini.enabled ? " and the Mac Mini" : ""}, plus every API model.
+            {start ? ` Claude Code history starts ${monthDay.format(new Date(`${start}T12:00:00Z`))}.` : ""}
+            {capture.note ? ` ${capture.note}` : ""}
           </p>
           <p className="text-xs mt-0.5">
             {captureNotes(capture, today, serverNow).map((n, i) => (
