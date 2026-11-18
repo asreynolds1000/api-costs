@@ -343,11 +343,11 @@ test("pricing: <synthetic> is never priced", () => {
 });
 
 test("pricing: the GPT-6.1 and 6.2 Codex models are priced at OpenAI's published rates", () => {
-  const oneMillionEach = { input: 1_000_000, output: 1_000_000, cacheRead: 1_000_000, cacheWrite5m: 0, cacheWrite1h: 0 };
-  // input + output + cached input, per OpenAI's model pages (read 2026-11-17)
-  assert.equal(estimateCost("gpt-6.2-astra", oneMillionEach), 8 + 40 + 0.4);
-  assert.equal(estimateCost("gpt-6.2-sol", oneMillionEach), 2 + 10 + 0.1);
-  assert.equal(estimateCost("gpt-6.1-sol", oneMillionEach), 2 + 10 + 0.1);
-  assert.equal(estimateCost("gpt-6.1-terra", oneMillionEach), 1 + 5 + 0.05);
-  assert.equal(estimateCost("gpt-6-luna", oneMillionEach), 0.1 + 0.5 + 0.01);
+  const oneMillionEach = { input: 1_000_000, output: 1_000_000, cacheRead: 1_000_000, cacheWrite5m: 1_000_000, cacheWrite1h: 0 };
+  // input + output + cached input + 30-minute cache write, per OpenAI's model pages (read 2026-11-17)
+  assert.equal(estimateCost("gpt-6.2-astra", oneMillionEach), 8 + 40 + 0.4 + 10);
+  assert.equal(estimateCost("gpt-6.2-sol", oneMillionEach), 2 + 10 + 0.1 + 2.5);
+  assert.equal(estimateCost("gpt-6.1-sol", oneMillionEach), 2 + 10 + 0.1 + 2.5);
+  assert.equal(estimateCost("gpt-6.1-terra", oneMillionEach), 1 + 5 + 0.05 + 1.25);
+  assert.equal(estimateCost("gpt-6-luna", oneMillionEach), 0.1 + 0.5 + 0.01 + 0.125);
 });
