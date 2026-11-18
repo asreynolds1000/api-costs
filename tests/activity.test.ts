@@ -6,7 +6,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createClaudeAccumulator } from "../src/lib/activity/claude-parse.ts";
 import { createCodexAccumulator } from "../src/lib/activity/codex-parse.ts";
-import { aggregateCostForBackfill, estimateCost, estimateRequestCost, normalizeModelId, PRICES } from "../src/lib/activity/pricing.ts";
+import { estimateCost, estimateRequestCost, normalizeModelId, PRICES } from "../src/lib/activity/pricing.ts";
 
 const toDate = (iso: string) => iso.slice(0, 10); // fixed stand-in for toEasternDate in tests
 
@@ -385,11 +385,6 @@ test("pricing: one 120K request costs more than two 60K requests with the same t
 test("pricing: a model with no long-context tier prices a request the same as estimateCost", () => {
   assert.equal(estimateRequestCost("claude-sonnet-5-5", req(500_000)), estimateCost("claude-sonnet-5-5", req(500_000)));
   assert.equal(estimateRequestCost("some-made-up-model-id", req(1)), null);
-});
-
-test("pricing: the aggregate backfill never prices a tiered model from summed usage", () => {
-  assert.equal(aggregateCostForBackfill("claude-haiku-5-5", req(10)), null);
-  assert.equal(aggregateCostForBackfill("claude-sonnet-5-5", req(10)), estimateCost("claude-sonnet-5-5", req(10)));
 });
 
 test("claude: finish(toDate, priceRequest) carries the per-request cost sum on each usage row", () => {

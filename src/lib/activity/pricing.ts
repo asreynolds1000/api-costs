@@ -189,13 +189,6 @@ export function estimateRequestCost(model: string, usage: UsageForCost): number 
   return tier && prompt > tier.overPromptTokens ? base * tier.multiplier : base;
 }
 
-// For repricing stored daily rows, which no longer know their request sizes. A model with a
-// long-context tier returns null here, so its rows are re-parsed and priced per request instead
-// of being underpriced from the total (indexer.ts).
-export function aggregateCostForBackfill(model: string, usage: UsageForCost): number | null {
-  return hasLongContextTier(model) ? null : estimateCost(model, usage);
-}
-
 export function hasLongContextTier(model: string): boolean {
   return !!PRICES[normalizeModelId(model)]?.longContext;
 }

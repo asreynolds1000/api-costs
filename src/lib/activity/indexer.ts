@@ -11,14 +11,14 @@ import { eq } from "drizzle-orm";
 import { db, schema, sqlite } from "@/lib/db";
 import { backfillMissingCosts } from "@/lib/db/backfill-costs";
 import { pathsNeedingReprice, recordPricingVersion } from "@/lib/db/reprice-paths";
+import { toEasternDate } from "@/lib/timezone";
+import { createClaudeAccumulator, type ClaudeFinishResult } from "./claude-parse";
+import { createCodexAccumulator, type CodexFinishResult } from "./codex-parse";
+import { estimateCost, estimateRequestCost, hasLongContextTier } from "./pricing";
 
 // Bump when a long-context tier is added or changed: every file with that model's rows is then
 // re-parsed once at per-request prices (src/lib/db/reprice-paths.ts).
 const PRICING_VERSION = "2026-11-17-haiku-5-5-tier";
-import { toEasternDate } from "@/lib/timezone";
-import { createClaudeAccumulator, type ClaudeFinishResult } from "./claude-parse";
-import { createCodexAccumulator, type CodexFinishResult } from "./codex-parse";
-import { aggregateCostForBackfill, estimateCost, estimateRequestCost, hasLongContextTier } from "./pricing";
 
 export type IndexResult = {
   filesSeen: number;
@@ -264,6 +264,7 @@ async function runIndexActivity(opts?: IndexOptions): Promise<IndexResult> {
       stat = statSync(entry.path);
     } catch (err) {
       errors.push(`${entry.path}: ${err instanceof Error ? err.message : String(err)}`);
+      if (needsReprice.has(entry.key)) repriceFailed = true;
       continue;
     }
 
@@ -294,10 +295,12 @@ async function runIndexActivity(opts?: IndexOptions): Promise<IndexResult> {
     }
   }
 
-  // Reprice rows indexed before their model had a price; unchanged files were skipped above.
+  // Price rows still NULL after the scan from their stored totals. Every tiered file still on disk
+  // was re-parsed above, so a tiered row left here comes from a pruned transcript and gets the
+  // base rate: a lower bound, since its request sizes are gone.
   let costsBackfilled = 0;
   try {
-    costsBackfilled = backfillMissingCosts(sqlite, aggregateCostForBackfill);
+    costsBackfilled = backfillMissingCosts(sqlite, estimateCost);
   } catch (err) {
     errors.push(`cost backfill: ${err instanceof Error ? err.message : String(err)}`);
   }
