@@ -1,5 +1,6 @@
 import { syncAll, type SyncResult } from "@/lib/sync";
 import { indexActivity } from "@/lib/activity/indexer";
+import { backupDatabase, copyMiniLogs } from "@/lib/capture";
 
 // One background loop in the pm2 process: sync every configured provider, then index
 // local Claude Code and Codex logs.
@@ -74,11 +75,13 @@ export function runTick(): Promise<SyncResult[]> {
     try {
       results = await syncAll();
       ok = results.every((r) => r.ok);
+      await copyMiniLogs(); // never throws; its status is reported separately from `ok`
       const indexed = await indexActivity();
       if (indexed.errors.length) {
         ok = false;
         console.error(`[scheduler] activity index: ${indexed.errors.length} file errors, first: ${indexed.errors[0]}`);
       }
+      await backupDatabase(); // once per day; skips when today's copy exists
     } catch (err) {
       ok = false;
       console.error("[scheduler] tick failed:", err);

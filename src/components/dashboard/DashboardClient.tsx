@@ -11,6 +11,7 @@ import type {
 } from "@/lib/db/queries";
 import type { PlanUsage as PlanUsageType } from "@/lib/plans";
 import type { SchedulerState } from "@/lib/scheduler";
+import type { CaptureStatus } from "@/lib/capture";
 import type { ActivityResult } from "@/lib/activity/queries";
 import { ActivitySection } from "./ActivitySection";
 import { DEFAULT_RANGE_DAYS, formatCurrency, formatRelativeTime, getProviderLabel } from "@/lib/format";
@@ -33,6 +34,7 @@ type DashboardData = {
   providerConfigured: Record<string, boolean>;
   plans: PlanUsageType[];
   scheduler: SchedulerState;
+  capture: CaptureStatus;
   activityYear: ActivityResult;
   activity: ActivityResult;
   serverNow: number;
@@ -184,7 +186,7 @@ export function DashboardClient({ data }: { data: DashboardData }) {
 
       </section>
 
-      <ActivitySection year={data.activityYear} initial={data.activity} today={data.today} serverNow={data.serverNow} />
+      <ActivitySection year={data.activityYear} initial={data.activity} today={data.today} serverNow={data.serverNow} capture={data.capture} />
 
       <SyncHistory />
     </main>

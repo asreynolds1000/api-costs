@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import type { ActivityResult } from "@/lib/activity/queries";
+import type { CaptureStatus } from "@/lib/capture";
 import { ACTIVITY_DEFAULT_DAYS as DEFAULT_DAYS, formatCompact, formatCurrency, formatInt } from "@/lib/format";
 import { shiftDate } from "@/lib/timezone";
 import { DateRangePicker } from "./DateRangePicker";
@@ -15,11 +16,38 @@ type Props = {
   initial: ActivityResult; // last DEFAULT_DAYS
   today: string;
   serverNow: number;
+  capture: CaptureStatus;
 };
 
 const monthDay = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
+const clock = new Intl.DateTimeFormat("en-US", { hour: "numeric", minute: "2-digit", timeZone: "America/New_York" });
+const MINI_STALE_MS = 2 * 60 * 60 * 1000; // the copy runs every 30 minutes
 
-export function ActivitySection({ year, initial, today, serverNow }: Props) {
+// One line each for the Mac Mini copy and the database backup, amber when they need a look.
+function captureNotes({ mini, backup }: CaptureStatus, today: string, serverNow: number) {
+  const notes: { text: string; warn: boolean }[] = [];
+  if (mini.enabled) {
+    if (!mini.copiedAt) notes.push({ text: "Mac Mini logs not copied yet", warn: true });
+    else {
+      const at = new Date(mini.copiedAt);
+      const when = mini.copiedAt.slice(0, 10) === new Date(serverNow).toISOString().slice(0, 10) ? clock.format(at) : monthDay.format(at);
+      notes.push({
+        text: `Mac Mini logs copied ${when}${mini.error ? " (last try failed)" : ""}`,
+        warn: !!mini.error || serverNow - at.getTime() > MINI_STALE_MS,
+      });
+    }
+  }
+  if (!backup.configured) notes.push({ text: "Database backup not set up", warn: true });
+  else if (!backup.date) notes.push({ text: "No database backup yet", warn: true });
+  else
+    notes.push({
+      text: `Database backed up ${monthDay.format(new Date(`${backup.date}T12:00:00Z`))}${backup.error ? " (last try failed)" : ""}`,
+      warn: !!backup.error || backup.date < shiftDate(today, -1),
+    });
+  return notes;
+}
+
+export function ActivitySection({ year, initial, today, serverNow, capture }: Props) {
   const [days, setDays] = useState(DEFAULT_DAYS);
   const seed = () => ({ [DEFAULT_DAYS]: initial, 365: year }) as Record<number, ActivityResult | "error">;
   const [byRange, setByRange] = useState(seed);
@@ -71,8 +99,17 @@ export function ActivitySection({ year, initial, today, serverNow }: Props) {
             Activity
           </h2>
           <p className="text-xs text-muted mt-0.5">
-            Claude Code and Codex on this Mac, plus every API model.
-            {start ? ` Claude Code history starts ${monthDay.format(new Date(`${start}T12:00:00Z`))}.` : ""}
+            Claude Code and Codex on this Mac and the Mac Mini, plus every API model.
+            {start ? ` Claude Code history starts ${monthDay.format(new Date(`${start}T12:00:00Z`))} and is partial before Sep 4.` : ""}
+            {" "}A few scheduled Mini jobs keep no transcript, so Mini figures run slightly low.
+          </p>
+          <p className="text-xs mt-0.5">
+            {captureNotes(capture, today, serverNow).map((n, i) => (
+              <span key={n.text} className={n.warn ? "text-warning" : "text-muted"}>
+                {i > 0 && " · "}
+                {n.text}
+              </span>
+            ))}
           </p>
         </div>
         <DateRangePicker activeDays={days} onChange={setDays} />
@@ -91,7 +128,7 @@ export function ActivitySection({ year, initial, today, serverNow }: Props) {
 
       <div className="bg-card border border-card-border rounded-xl p-4 sm:p-5">
         <h3 className="text-sm font-medium mb-3">Messages per day, last 12 months</h3>
-        <ActivityHeatmap daily={year.daily} sessions={year.sessions} today={today} dataStart={year.dataStart} />
+        <ActivityHeatmap daily={year.daily} mini={year.mini} sessions={year.sessions} today={today} dataStart={year.dataStart} />
       </div>
 
       {data && (
