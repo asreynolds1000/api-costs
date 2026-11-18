@@ -11,6 +11,7 @@ import { ACTIVITY_DEFAULT_DAYS, DEFAULT_RANGE_DAYS } from "@/lib/format";
 import { getAllAdapters } from "@/lib/providers/registry";
 import { getSchedulerState } from "@/lib/scheduler";
 import { getActivity } from "@/lib/activity/queries";
+import { getCaptureStatus } from "@/lib/capture";
 
 // Don't cache -- always read fresh from SQLite and the local usage files
 export const dynamic = "force-dynamic";
@@ -45,6 +46,7 @@ export default function Home() {
         providerConfigured,
         plans: getPlanUsage(),
         scheduler: getSchedulerState(),
+        capture: getCaptureStatus(),
         activityYear,
         activity,
         serverNow,

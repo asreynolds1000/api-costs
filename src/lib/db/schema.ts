@@ -57,6 +57,8 @@ export const providerState = sqliteTable(
 
 // --- Activity indexing (Claude Code / Codex local transcripts) -----------------------------
 // Rows are keyed by source FILE PATH: re-parsing a file replaces its rows in one transaction.
+// Key format: `[mini:]<source>:<path relative to the log root>`. The "mini:" prefix marks a
+// file from the Mac Mini mirror (src/lib/activity/mini-mirror.ts); no prefix means this Mac.
 // Rows are NEVER deleted just because a file disappeared from disk (Claude Code prunes old
 // transcripts), so history survives even after the source file is gone.
 

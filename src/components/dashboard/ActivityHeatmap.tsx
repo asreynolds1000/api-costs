@@ -1,18 +1,19 @@
 "use client";
 
 import { useState } from "react";
-import type { ActivityDaily, SessionsByDay } from "@/lib/activity/queries";
+import type { ActivityDaily, MiniDaily, SessionsByDay } from "@/lib/activity/queries";
 import { formatCurrency, formatInt } from "@/lib/format";
 import { shiftDate } from "@/lib/timezone";
 
 type Props = {
   daily: ActivityDaily[];
+  mini: MiniDaily[]; // the Mac Mini's share, already included in `daily`
   sessions: SessionsByDay[];
   today: string; // YYYY-MM-DD, Eastern
   dataStart: { claude: string | null; codex: string | null }; // earliest day with indexed usage
 };
 
-type Day = { date: string; messages: number; sessions: number; estCost: number };
+type Day = { date: string; messages: number; sessions: number; estCost: number; miniMessages: number; miniCost: number };
 
 // One grid per tool, each in its own hue (the spend chart's Anthropic and OpenAI colours) and
 // scaled on its own: Codex runs at a tenth of Claude Code's message count, so a shared scale
@@ -46,7 +47,7 @@ const utc = (date: string) => new Date(`${date}T12:00:00Z`);
 
 type Hover = { source: string; day: Day; x: number; y: number; beforeData: boolean };
 
-export function ActivityHeatmap({ daily, sessions, today, dataStart }: Props) {
+export function ActivityHeatmap({ daily, mini, sessions, today, dataStart }: Props) {
   const [hover, setHover] = useState<Hover | null>(null);
 
   // 53 week columns ending with the current week; columns start on Sunday
@@ -69,7 +70,7 @@ export function ActivityHeatmap({ daily, sessions, today, dataStart }: Props) {
     const byDate = new Map<string, Day>();
     const get = (date: string) => {
       let d = byDate.get(date);
-      if (!d) byDate.set(date, (d = { date, messages: 0, sessions: 0, estCost: 0 }));
+      if (!d) byDate.set(date, (d = { date, messages: 0, sessions: 0, estCost: 0, miniMessages: 0, miniCost: 0 }));
       return d;
     };
     for (const r of daily) {
@@ -77,6 +78,12 @@ export function ActivityHeatmap({ daily, sessions, today, dataStart }: Props) {
       const d = get(r.date);
       d.messages += r.messages;
       d.estCost += r.estCost;
+    }
+    for (const r of mini) {
+      if (r.source !== source.key) continue;
+      const d = get(r.date);
+      d.miniMessages += r.messages;
+      d.miniCost += r.estCost;
     }
     let firstSession: string | null = null;
     for (const s of sessions) {
@@ -162,7 +169,7 @@ export function ActivityHeatmap({ daily, sessions, today, dataStart }: Props) {
                       !outOfRange &&
                       setHover({
                         source: source.key,
-                        day: day ?? { date: d.date, messages: 0, sessions: 0, estCost: 0 },
+                        day: day ?? { date: d.date, messages: 0, sessions: 0, estCost: 0, miniMessages: 0, miniCost: 0 },
                         x,
                         y,
                         beforeData,
@@ -192,6 +199,11 @@ export function ActivityHeatmap({ daily, sessions, today, dataStart }: Props) {
                 {formatInt(hover.day.messages)} messages, {formatInt(hover.day.sessions)} sessions
               </p>
               {hover.day.estCost > 0 && <p className="text-muted">≈ {formatCurrency(hover.day.estCost)} at API prices</p>}
+              {hover.day.miniMessages > 0 && (
+                <p className="text-muted">
+                  Mac Mini: {formatInt(hover.day.miniMessages)} messages, ≈ {formatCurrency(hover.day.miniCost)}
+                </p>
+              )}
             </>
           ) : (
             <p className="text-muted mt-0.5">{hover.beforeData ? "Before the logs this Mac still has" : "No activity"}</p>

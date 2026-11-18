@@ -8,7 +8,7 @@ Pulls actual billed amounts from each provider's billing API. No proxies, no est
 
 - **Plan limits** -- Claude (Pro/Max) and ChatGPT Codex as dials per window, with reset times, a pace notch and a straight-line projection ("runs out Thu 2 PM"), plus a burn-up chart of each weekly limit against even pace (needs the optional `history.jsonl` quota log in `~/.local/state/ai-usage/`)
 - **Spend summary** -- this month with daily bars and the change against last month at the same point, a month-end projection, last 30 days, this week, this year
-- **Activity** -- from the Claude Code and Codex logs on this machine: sessions, messages, a 12-month heatmap per tool (Claude Code and Codex, each on its own scale), MCP servers (with per-tool counts), skills, subagents and built-in tools, and every model used with tokens and its cost at API list prices
+- **Activity** -- from the Claude Code and Codex logs on this machine and a second Mac: sessions, messages, a 12-month heatmap per tool (Claude Code and Codex, each on its own scale), MCP servers (with per-tool counts), skills, subagents and built-in tools, and every model used with tokens and its cost at API list prices
 - **Auto-sync** -- the server syncs every provider, refreshes quotas and indexes local logs every 30 minutes (`AUTO_SYNC_MINUTES`, 0 turns it off); the page refreshes itself every 2 minutes
 - **Spend chart** -- stacked bars by provider; daily for 7/30/90 days, weekly for 1 year
 - **Provider breakdown** -- dollars and share per provider for the selected range
@@ -73,7 +73,20 @@ and credit balances are not in either source.
 The scheduler indexes `~/.claude/projects` and `~/.claude-ss/projects` (override with
 `CLAUDE_PROJECTS_DIRS`, colon-separated) and `$CODEX_HOME/sessions` into local SQLite tables.
 Only changed files are re-read. Rows stay after Claude Code prunes old transcripts, so history
-accumulates from the first run. Nothing leaves the machine.
+accumulates from the first run.
+
+**A second machine.** Before each index, the scheduler copies another Mac's logs over SSH with
+rsync (`MINI_HOST`, default `mac-mini`; `MINI_MIRROR=0` turns it off) into
+`~/.local/state/ai-usage/mini/` (`MINI_MIRROR_DIR`). The copy never deletes, so it also keeps
+that machine's transcripts after it prunes them. Its rows are keyed `mini:<source>:<path>`,
+count in every total, and show separately in the heatmap tooltip. Runs started with
+`--no-session-persistence` leave no transcript and are not counted.
+
+**Database backup.** Once a day the scheduler writes an `age`-encrypted copy of the database to
+`DB_BACKUP_DIR` as `costs-YYYY-MM-DD.sqlite.age`, encrypted to the public key in
+`BACKUP_AGE_RECIPIENT_FILE`. It keeps the newest 14 plus the oldest copy of each earlier month.
+Both settings are required; the Activity header says when a backup or a copy is overdue.
+`ACTIVITY_NOTE` adds a sentence to that header for caveats about your own history.
 
 Costs for Claude Code and Codex are estimates at API list prices (`src/lib/activity/pricing.ts`);
 unpriced models show no cost. Claude Code logs usage per message; Codex logs it only since

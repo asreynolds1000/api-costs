@@ -1,4 +1,4 @@
-import { sql, eq, and, gte, lte } from "drizzle-orm";
+import { sql, eq, and, gte, lte, like } from "drizzle-orm";
 import { db } from "../db";
 import { activityUsage, activityTools, activitySessions, costEntries } from "../db/schema";
 import { toEasternDate } from "../timezone";
@@ -48,14 +48,32 @@ export type ActivityTotals = {
   sessions: number; // non-subagent sessions started within [start, end]
 };
 
+// The Mac Mini's share of each day, already included in `daily` (rows whose key starts "mini:").
+export type MiniDaily = { date: string; source: string; messages: number; estCost: number };
+
 export type ActivityResult = {
   daily: ActivityDaily[];
+  mini: MiniDaily[];
   models: ActivityModel[];
   tools: ActivityToolsSummary;
   sessions: SessionsByDay[];
   dataStart: { claude: string | null; codex: string | null };
   totals: ActivityTotals;
 };
+
+function getMiniDaily(start: string, end: string): MiniDaily[] {
+  return db
+    .select({
+      date: activityUsage.date,
+      source: activityUsage.source,
+      messages: sql<number>`COALESCE(SUM(${activityUsage.messages}), 0)`,
+      estCost: sql<number>`COALESCE(SUM(${activityUsage.estCostUsd}), 0)`,
+    })
+    .from(activityUsage)
+    .where(and(gte(activityUsage.date, start), lte(activityUsage.date, end), like(activityUsage.path, "mini:%")))
+    .groupBy(activityUsage.date, activityUsage.source)
+    .all();
+}
 
 function getDailyUsage(start: string, end: string): ActivityDaily[] {
   return db
@@ -234,5 +252,5 @@ export function getActivity(start: string, end: string): ActivityResult {
   const dataStart = getDataStart();
   const totals = getTotals(daily, sessions);
 
-  return { daily, models, tools, sessions, dataStart, totals };
+  return { daily, mini: getMiniDaily(start, end), models, tools, sessions, dataStart, totals };
 }

@@ -15,6 +15,7 @@ import { toEasternDate } from "@/lib/timezone";
 import { createClaudeAccumulator, type ClaudeFinishResult } from "./claude-parse";
 import { createCodexAccumulator, type CodexFinishResult } from "./codex-parse";
 import { estimateCost, estimateRequestCost, hasLongContextTier } from "./pricing";
+import { miniMirrorDir } from "./mini-mirror";
 
 // Bump when a long-context tier is added or changed: every file with that model's rows is then
 // re-parsed once at per-request prices (src/lib/db/reprice-paths.ts).
@@ -32,6 +33,7 @@ export type IndexResult = {
 export type IndexOptions = {
   claudeProjectsDirs?: string[];
   codexHome?: string;
+  miniMirrorDir?: string | null; // null skips the Mac Mini mirror
 };
 
 type Source = "claude-code" | "codex";
@@ -71,16 +73,19 @@ function codexSessionsRoot(opts?: IndexOptions): string {
 }
 
 // <root>/<proj>/<session>.jsonl (a session file) and
-// <root>/<proj>/<session>/subagents/agent-*.jsonl (that session's subagent transcripts).
-function listClaudeFiles(root: string): FileEntry[] {
+// <root>/<proj>/<session>/subagents/agent-*.jsonl (that session's subagent transcripts), and
+// <root>/<proj>/<session>/subagents/workflows/<run>/agent-*.jsonl (Workflow tool agents).
+// `keyPrefix` tags the machine: "" for this Mac, "mini:" for the Mac Mini mirror.
+function listClaudeFiles(root: string, keyPrefix = ""): FileEntry[] {
   const out: FileEntry[] = [];
+  const k = `${keyPrefix}claude-code:`;
   for (const proj of listDir(root)) {
     const projDir = join(root, proj);
     if (!isDirectory(projDir)) continue;
     for (const entry of listDir(projDir)) {
       const entryPath = join(projDir, entry);
       if (entry.endsWith(".jsonl")) {
-        out.push({ path: entryPath, key: `claude-code:${proj}/${entry}`, source: "claude-code", isSubagent: false });
+        out.push({ path: entryPath, key: `${k}${proj}/${entry}`, source: "claude-code", isSubagent: false });
         continue;
       }
       const subagentsDir = join(entryPath, "subagents");
@@ -88,7 +93,21 @@ function listClaudeFiles(root: string): FileEntry[] {
         if (sub.endsWith(".jsonl")) {
           out.push({
             path: join(subagentsDir, sub),
-            key: `claude-code:${proj}/${entry}/subagents/${sub}`,
+            key: `${k}${proj}/${entry}/subagents/${sub}`,
+            source: "claude-code",
+            isSubagent: true,
+          });
+        }
+      }
+      // Workflow tool agents: <session>/subagents/workflows/<run>/agent-*.jsonl. The run's
+      // journal.jsonl carries no token usage, so only agent files are read.
+      const workflowsDir = join(subagentsDir, "workflows");
+      for (const run of listDir(workflowsDir)) {
+        for (const f of listDir(join(workflowsDir, run))) {
+          if (!f.startsWith("agent-") || !f.endsWith(".jsonl")) continue;
+          out.push({
+            path: join(workflowsDir, run, f),
+            key: `${k}${proj}/${entry}/subagents/workflows/${run}/${f}`,
             source: "claude-code",
             isSubagent: true,
           });
@@ -100,7 +119,7 @@ function listClaudeFiles(root: string): FileEntry[] {
 }
 
 // <sessions>/YYYY/MM/DD/rollout-*.jsonl
-function listCodexFiles(sessionsRoot: string): FileEntry[] {
+function listCodexFiles(sessionsRoot: string, keyPrefix = ""): FileEntry[] {
   const out: FileEntry[] = [];
   for (const y of listDir(sessionsRoot).filter((n) => /^\d+$/.test(n))) {
     const yDir = join(sessionsRoot, y);
@@ -110,7 +129,7 @@ function listCodexFiles(sessionsRoot: string): FileEntry[] {
         const dDir = join(mDir, d);
         for (const f of listDir(dDir)) {
           if (f.startsWith("rollout-") && f.endsWith(".jsonl")) {
-            out.push({ path: join(dDir, f), key: `codex:${y}/${m}/${d}/${f}`, source: "codex", isSubagent: false });
+            out.push({ path: join(dDir, f), key: `${keyPrefix}codex:${y}/${m}/${d}/${f}`, source: "codex", isSubagent: false });
           }
         }
       }
@@ -235,6 +254,12 @@ async function runIndexActivity(opts?: IndexOptions): Promise<IndexResult> {
   const files: FileEntry[] = [];
   for (const root of claudeRoots(opts)) files.push(...listClaudeFiles(root));
   files.push(...listCodexFiles(codexSessionsRoot(opts)));
+  // The Mac Mini's logs, copied here by mini-mirror.ts. Keys start with "mini:".
+  const mini = opts?.miniMirrorDir === undefined ? miniMirrorDir() : opts.miniMirrorDir;
+  if (mini) {
+    files.push(...listClaudeFiles(join(mini, "claude"), "mini:"), ...listClaudeFiles(join(mini, "claude-ss"), "mini:"));
+    files.push(...listCodexFiles(join(mini, "codex"), "mini:"));
+  }
 
   const existing = new Map<string, { size: number; mtimeMs: number }>();
   for (const row of db
@@ -272,6 +297,11 @@ async function runIndexActivity(opts?: IndexOptions): Promise<IndexResult> {
     const mtime = Math.trunc(stat.mtimeMs);
     if (prev && prev.size === stat.size && prev.mtimeMs === mtime && !needsReprice.has(entry.key)) {
       continue; // unchanged since the last run
+    }
+    // Transcripts only grow. A Mac Mini copy that shrank (a truncated write on the Mini, copied
+    // over the mirror) would replace this file's rows with fewer, so keep the rows it already has.
+    if (prev && entry.key.startsWith("mini:") && stat.size < prev.size) {
+      continue;
     }
 
     try {
