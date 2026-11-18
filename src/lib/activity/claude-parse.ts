@@ -13,7 +13,16 @@ export type ClaudeUsageRow = {
   cacheRead: number;
   cacheWrite5m: number;
   cacheWrite1h: number;
+  // Sum of per-request costs, set only when finish() is given a pricer. null when any request in
+  // the row could not be priced. Undefined means the caller prices the summed usage itself.
+  estCostUsd?: number | null;
 };
+
+// Prices one request. Injected so this module stays free of imports (see the header).
+export type PriceRequest = (
+  model: string,
+  usage: { input: number; output: number; cacheRead: number; cacheWrite5m: number; cacheWrite1h: number }
+) => number | null;
 
 export type ClaudeToolRow = {
   date: string;
@@ -224,7 +233,7 @@ export function createClaudeAccumulator(opts: ClaudeAccumulatorOpts) {
     }
   }
 
-  function finish(toDate: (iso: string) => string): ClaudeFinishResult {
+  function finish(toDate: (iso: string) => string, priceRequest?: PriceRequest): ClaudeFinishResult {
     const usageGroups = new Map<string, ClaudeUsageRow>();
     for (const v of usageByKey.values()) {
       const date = toDate(v.timestamp);
@@ -242,6 +251,7 @@ export function createClaudeAccumulator(opts: ClaudeAccumulatorOpts) {
           cacheRead: 0,
           cacheWrite5m: 0,
           cacheWrite1h: 0,
+          ...(priceRequest ? { estCostUsd: 0 } : {}),
         };
         usageGroups.set(key, g);
       }
@@ -251,6 +261,10 @@ export function createClaudeAccumulator(opts: ClaudeAccumulatorOpts) {
       g.cacheRead += v.usage.cacheRead;
       g.cacheWrite5m += v.usage.cacheWrite5m;
       g.cacheWrite1h += v.usage.cacheWrite1h;
+      if (priceRequest && g.estCostUsd !== null) {
+        const cost = priceRequest(v.model, v.usage);
+        g.estCostUsd = cost === null ? null : (g.estCostUsd ?? 0) + cost;
+      }
     }
 
     const toolGroups = new Map<string, ClaudeToolRow>();
