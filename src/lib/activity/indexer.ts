@@ -10,11 +10,16 @@ import { join } from "node:path";
 import { eq } from "drizzle-orm";
 import { db, schema, sqlite } from "@/lib/db";
 import { backfillMissingCosts } from "@/lib/db/backfill-costs";
+import { pathsNeedingReprice, recordPricingVersion } from "@/lib/db/reprice-paths";
 import { toEasternDate } from "@/lib/timezone";
 import { createClaudeAccumulator, type ClaudeFinishResult } from "./claude-parse";
 import { createCodexAccumulator, type CodexFinishResult } from "./codex-parse";
-import { estimateCost } from "./pricing";
+import { estimateCost, estimateRequestCost, hasLongContextTier } from "./pricing";
 import { miniMirrorDir } from "./mini-mirror";
+
+// Bump when a long-context tier is added or changed: every file with that model's rows is then
+// re-parsed once at per-request prices (src/lib/db/reprice-paths.ts).
+const PRICING_VERSION = "2026-11-17-haiku-5-5-tier";
 
 export type IndexResult = {
   filesSeen: number;
@@ -156,7 +161,7 @@ async function parseFile(entry: FileEntry): Promise<ClaudeFinishResult | CodexFi
     const subagentType = entry.isSubagent ? readSubagentType(entry.path) : undefined;
     const acc = createClaudeAccumulator({ isSubagent: entry.isSubagent, subagentType });
     await streamLines(entry.path, acc.line);
-    return acc.finish(toDate);
+    return acc.finish(toDate, estimateRequestCost); // per-request, so long-context tiers apply
   }
   const acc = createCodexAccumulator();
   await streamLines(entry.path, acc.line);
@@ -181,7 +186,8 @@ function writeFileRows(
     tx.delete(schema.activitySessions).where(eq(schema.activitySessions.path, entry.key)).run();
 
     for (const u of result.usage) {
-      const estCostUsd = estimateCost(u.model, u);
+      // Claude rows arrive priced per request; Codex rows are still priced from the daily total.
+      const estCostUsd = "estCostUsd" in u && u.estCostUsd !== undefined ? u.estCostUsd : estimateCost(u.model, u);
       tx.insert(schema.activityUsage)
         .values({
           path: entry.key,
@@ -267,6 +273,13 @@ async function runIndexActivity(opts?: IndexOptions): Promise<IndexResult> {
     existing.set(row.path, { size: row.size, mtimeMs: row.mtimeMs });
   }
 
+  // Files to re-parse even when unchanged so a long-context tier is priced per request: unpriced
+  // rows for a tiered model always, and every tiered file once per PRICING_VERSION (rows priced by
+  // older code are not NULL). The backfill below skips tiered models, since a daily total would
+  // underprice them.
+  const needsReprice = pathsNeedingReprice(sqlite, hasLongContextTier, PRICING_VERSION);
+  let repriceFailed = false;
+
   let filesParsed = 0;
   let rowsWritten = 0;
 
@@ -276,12 +289,13 @@ async function runIndexActivity(opts?: IndexOptions): Promise<IndexResult> {
       stat = statSync(entry.path);
     } catch (err) {
       errors.push(`${entry.path}: ${err instanceof Error ? err.message : String(err)}`);
+      if (needsReprice.has(entry.key)) repriceFailed = true;
       continue;
     }
 
     const prev = existing.get(entry.key);
     const mtime = Math.trunc(stat.mtimeMs);
-    if (prev && prev.size === stat.size && prev.mtimeMs === mtime) {
+    if (prev && prev.size === stat.size && prev.mtimeMs === mtime && !needsReprice.has(entry.key)) {
       continue; // unchanged since the last run
     }
     // Transcripts only grow. A Mac Mini copy that shrank (a truncated write on the Mini, copied
@@ -296,12 +310,24 @@ async function runIndexActivity(opts?: IndexOptions): Promise<IndexResult> {
       filesParsed++;
     } catch (err) {
       errors.push(`${entry.path}: ${err instanceof Error ? err.message : String(err)}`);
+      if (needsReprice.has(entry.key)) repriceFailed = true;
     }
 
     await yieldToEventLoop();
   }
 
-  // Reprice rows indexed before their model had a price; unchanged files were skipped above.
+  // Record the version only when every re-parse attempted for it succeeded, so a failure retries.
+  if (!repriceFailed) {
+    try {
+      recordPricingVersion(sqlite, PRICING_VERSION);
+    } catch (err) {
+      errors.push(`pricing version: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+
+  // Price rows still NULL after the scan from their stored totals. Every tiered file still on disk
+  // was re-parsed above, so a tiered row left here comes from a pruned transcript and gets the
+  // base rate: a lower bound, since its request sizes are gone.
   let costsBackfilled = 0;
   try {
     costsBackfilled = backfillMissingCosts(sqlite, estimateCost);
