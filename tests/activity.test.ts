@@ -351,3 +351,13 @@ test("pricing: the GPT-6.1 and 6.2 Codex models are priced at OpenAI's published
   assert.equal(estimateCost("gpt-6.1-terra", oneMillionEach), 1 + 5 + 0.05 + 1.25);
   assert.equal(estimateCost("gpt-6-luna", oneMillionEach), 0.1 + 0.5 + 0.01 + 0.125);
 });
+
+test("pricing: Claude Fable 5.2, Sonnet 5.5 and Haiku 5.5 are priced at Anthropic's published rates", () => {
+  const oneMillionEach = { input: 1_000_000, output: 1_000_000, cacheRead: 1_000_000, cacheWrite5m: 1_000_000, cacheWrite1h: 1_000_000 };
+  // input + output + cache hit + 5m write + 1h write, per platform.claude.com pricing (read 2026-11-17)
+  assert.equal(estimateCost("claude-fable-5-2", oneMillionEach), 8 + 40 + 0.2 + 10 + 16);
+  assert.equal(estimateCost("claude-sonnet-5-5", oneMillionEach), 2 + 10 + 0.1 + 2.5 + 4);
+  assert.equal(estimateCost("claude-haiku-5-5", oneMillionEach), 0.1 + 0.5 + 0.01 + 0.125 + 0.2);
+  // Control: the Opus 5.5 row, fitted earlier against Claude Code's own cost figures, matches the same page.
+  assert.equal(estimateCost("claude-opus-5-5", oneMillionEach), 4 + 20 + 0.2 + 5 + 8);
+});

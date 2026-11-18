@@ -53,6 +53,19 @@ export const PRICES: Record<string, ModelPrice> = {
   // cacheWrite1h = 2x input ($8), before the full multi-session fit below.
   "claude-opus-5-5": priced(4, 20, { cacheRead: 0.2, cacheWrite1h: 8, cacheWrite5m: 5 }),
 
+  // The next three are from Anthropic's pricing page (platform.claude.com/docs/en/about-claude/
+  // pricing), read 2026-11-17; the Opus 5.5 row above matches the same page exactly.
+  // Fable 5.2: $8/$40, cache hit $0.20 (0.025x input), writes $10 (5m) and $16 (1h).
+  "claude-fable-5-2": priced(8, 40, { cacheRead: 0.2, cacheWrite5m: 10, cacheWrite1h: 16 }),
+
+  // Sonnet 5.5: $2/$10, cache hit $0.10 (0.05x input), writes $2.50 (5m) and $4 (1h).
+  "claude-sonnet-5-5": priced(2, 10, { cacheRead: 0.1, cacheWrite5m: 2.5, cacheWrite1h: 4 }),
+
+  // Haiku 5.5, prompts up to 100K tokens: $0.10/$0.50, cache hit $0.01, writes $0.125 (5m) and
+  // $0.20 (1h). Prompts over 100K cost 5x; usage is summed per day before pricing, so that tier
+  // is not modeled and long Haiku prompts are undercounted.
+  "claude-haiku-5-5": priced(0.1, 0.5, { cacheRead: 0.01, cacheWrite5m: 0.125, cacheWrite1h: 0.2 }),
+
   // $5/$25 (line 124), no documented cache-read override -> default 0.1x = $0.50.
   "claude-opus-5": priced(5, 25),
 
