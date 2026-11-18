@@ -10,6 +10,11 @@ import { join } from "node:path";
 import { eq } from "drizzle-orm";
 import { db, schema, sqlite } from "@/lib/db";
 import { backfillMissingCosts } from "@/lib/db/backfill-costs";
+import { pathsNeedingReprice, recordPricingVersion } from "@/lib/db/reprice-paths";
+
+// Bump when a long-context tier is added or changed: every file with that model's rows is then
+// re-parsed once at per-request prices (src/lib/db/reprice-paths.ts).
+const PRICING_VERSION = "2026-11-17-haiku-5-5-tier";
 import { toEasternDate } from "@/lib/timezone";
 import { createClaudeAccumulator, type ClaudeFinishResult } from "./claude-parse";
 import { createCodexAccumulator, type CodexFinishResult } from "./codex-parse";
@@ -243,15 +248,12 @@ async function runIndexActivity(opts?: IndexOptions): Promise<IndexResult> {
     existing.set(row.path, { size: row.size, mtimeMs: row.mtimeMs });
   }
 
-  // Files with an unpriced row for a model that has a long-context tier are re-parsed even when
-  // unchanged, so those rows get per-request prices. The backfill below skips such models, since a
-  // daily total would underprice them. Once priced, a row is no longer NULL and is not re-parsed.
-  const needsReprice = new Set<string>();
-  for (const row of sqlite
-    .prepare("SELECT DISTINCT path, model FROM activity_usage WHERE est_cost_usd IS NULL")
-    .all() as { path: string; model: string }[]) {
-    if (hasLongContextTier(row.model)) needsReprice.add(row.path);
-  }
+  // Files to re-parse even when unchanged so a long-context tier is priced per request: unpriced
+  // rows for a tiered model always, and every tiered file once per PRICING_VERSION (rows priced by
+  // older code are not NULL). The backfill below skips tiered models, since a daily total would
+  // underprice them.
+  const needsReprice = pathsNeedingReprice(sqlite, hasLongContextTier, PRICING_VERSION);
+  let repriceFailed = false;
 
   let filesParsed = 0;
   let rowsWritten = 0;
@@ -277,9 +279,19 @@ async function runIndexActivity(opts?: IndexOptions): Promise<IndexResult> {
       filesParsed++;
     } catch (err) {
       errors.push(`${entry.path}: ${err instanceof Error ? err.message : String(err)}`);
+      if (needsReprice.has(entry.key)) repriceFailed = true;
     }
 
     await yieldToEventLoop();
+  }
+
+  // Record the version only when every re-parse attempted for it succeeded, so a failure retries.
+  if (!repriceFailed) {
+    try {
+      recordPricingVersion(sqlite, PRICING_VERSION);
+    } catch (err) {
+      errors.push(`pricing version: ${err instanceof Error ? err.message : String(err)}`);
+    }
   }
 
   // Reprice rows indexed before their model had a price; unchanged files were skipped above.
