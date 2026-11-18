@@ -6,7 +6,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createClaudeAccumulator } from "../src/lib/activity/claude-parse.ts";
 import { createCodexAccumulator } from "../src/lib/activity/codex-parse.ts";
-import { estimateCost, normalizeModelId, PRICES } from "../src/lib/activity/pricing.ts";
+import { aggregateCostForBackfill, estimateCost, estimateRequestCost, normalizeModelId, PRICES } from "../src/lib/activity/pricing.ts";
 
 const toDate = (iso: string) => iso.slice(0, 10); // fixed stand-in for toEasternDate in tests
 
@@ -360,4 +360,51 @@ test("pricing: Claude Fable 5.2, Sonnet 5.5 and Haiku 5.5 are priced at Anthropi
   assert.equal(estimateCost("claude-haiku-5-5", oneMillionEach), 0.1 + 0.5 + 0.01 + 0.125 + 0.2);
   // Control: the Opus 5.5 row, fitted earlier against Claude Code's own cost figures, matches the same page.
   assert.equal(estimateCost("claude-opus-5-5", oneMillionEach), 4 + 20 + 0.2 + 5 + 8);
+});
+
+// --- Long-context tier (Haiku 5.5: every rate is 5x for a prompt over 100K tokens) ---------------
+const req = (input: number, cacheRead = 0, output = 1000) => ({ input, output, cacheRead, cacheWrite5m: 0, cacheWrite1h: 0 });
+
+test("pricing: Haiku 5.5 prices a request over 100K prompt tokens at 5x, at or under it at 1x", () => {
+  const small = estimateRequestCost("claude-haiku-5-5", req(50_000));
+  assert.ok(Math.abs((small ?? 0) - (50_000 * 0.1 + 1000 * 0.5) / 1e6) < 1e-12);
+  const big = estimateRequestCost("claude-haiku-5-5", req(120_000));
+  assert.ok(Math.abs((big ?? 0) - 5 * (120_000 * 0.1 + 1000 * 0.5) / 1e6) < 1e-12);
+  // The prompt is input plus cache reads and writes: 20K fresh + 90K cached is over the line.
+  const cached = estimateRequestCost("claude-haiku-5-5", req(20_000, 90_000));
+  assert.ok(Math.abs((cached ?? 0) - 5 * (20_000 * 0.1 + 90_000 * 0.01 + 1000 * 0.5) / 1e6) < 1e-12);
+  assert.equal(estimateRequestCost("claude-haiku-5-5", req(100_000)), estimateCost("claude-haiku-5-5", req(100_000)));
+});
+
+test("pricing: one 120K request costs more than two 60K requests with the same total", () => {
+  const one = estimateRequestCost("claude-haiku-5-5", req(120_000, 0, 0)) ?? 0;
+  const two = 2 * (estimateRequestCost("claude-haiku-5-5", req(60_000, 0, 0)) ?? 0);
+  assert.ok(one > two * 4.99 && one < two * 5.01);
+});
+
+test("pricing: a model with no long-context tier prices a request the same as estimateCost", () => {
+  assert.equal(estimateRequestCost("claude-sonnet-5-5", req(500_000)), estimateCost("claude-sonnet-5-5", req(500_000)));
+  assert.equal(estimateRequestCost("some-made-up-model-id", req(1)), null);
+});
+
+test("pricing: the aggregate backfill never prices a tiered model from summed usage", () => {
+  assert.equal(aggregateCostForBackfill("claude-haiku-5-5", req(10)), null);
+  assert.equal(aggregateCostForBackfill("claude-sonnet-5-5", req(10)), estimateCost("claude-sonnet-5-5", req(10)));
+});
+
+test("claude: finish(toDate, priceRequest) carries the per-request cost sum on each usage row", () => {
+  const acc = createClaudeAccumulator({ isSubagent: false });
+  const line = (msgId: string, input: number) => assistantLine({
+    ts: "2026-11-01T10:00:00.000Z", cwd: "/x/proj", msgId, requestId: "r-" + msgId, model: "claude-haiku-5-5",
+    content: [{ type: "text", text: "ok" }], usage: { input_tokens: input, output_tokens: 0 },
+  });
+  acc.line(line("m1", 120_000)); // over the line: 5x
+  acc.line(line("m2", 60_000));  // under: 1x
+  const rows = acc.finish(toDate, estimateRequestCost).usage;
+  assert.equal(rows.length, 1);
+  assert.ok(Math.abs((rows[0].estCostUsd ?? 0) - (5 * 120_000 * 0.1 + 60_000 * 0.1) / 1e6) < 1e-12);
+  // Without a pricer the row carries no cost, and the indexer prices it as before.
+  const acc2 = createClaudeAccumulator({ isSubagent: false });
+  acc2.line(line("m1", 120_000));
+  assert.equal(acc2.finish(toDate).usage[0].estCostUsd, undefined);
 });

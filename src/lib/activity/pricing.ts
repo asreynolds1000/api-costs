@@ -27,9 +27,17 @@ export type ModelPrice = {
   cacheRead: number;
   cacheWrite5m: number;
   cacheWrite1h: number;
+  // A request whose prompt (input + cache reads + cache writes) exceeds overPromptTokens is billed
+  // at every rate times `multiplier`. Only a single request can be tested against this, so it is
+  // applied by estimateRequestCost, never to summed usage.
+  longContext?: { overPromptTokens: number; multiplier: number };
 };
 
-function priced(input: number, output: number, opts?: { cacheRead?: number; cacheWrite5m?: number; cacheWrite1h?: number }): ModelPrice {
+function priced(
+  input: number,
+  output: number,
+  opts?: { cacheRead?: number; cacheWrite5m?: number; cacheWrite1h?: number; longContext?: ModelPrice["longContext"] }
+): ModelPrice {
   return {
     input,
     output,
@@ -39,6 +47,7 @@ function priced(input: number, output: number, opts?: { cacheRead?: number; cach
     // 0 cacheWrite1h tokens for them, so this rate is inert there; the default (2x input)
     // still applies uniformly rather than being conditioned on provider.
     cacheWrite1h: opts?.cacheWrite1h ?? input * 2,
+    ...(opts?.longContext ? { longContext: opts.longContext } : {}),
   };
 }
 
@@ -62,9 +71,12 @@ export const PRICES: Record<string, ModelPrice> = {
   "claude-sonnet-5-5": priced(2, 10, { cacheRead: 0.1, cacheWrite5m: 2.5, cacheWrite1h: 4 }),
 
   // Haiku 5.5, prompts up to 100K tokens: $0.10/$0.50, cache hit $0.01, writes $0.125 (5m) and
-  // $0.20 (1h). Prompts over 100K cost 5x; usage is summed per day before pricing, so that tier
-  // is not modeled and long Haiku prompts are undercounted.
-  "claude-haiku-5-5": priced(0.1, 0.5, { cacheRead: 0.01, cacheWrite5m: 0.125, cacheWrite1h: 0.2 }),
+  // $0.20 (1h). A prompt over 100K costs exactly 5x on every rate ($0.50/$2.50, $0.05, $0.625,
+  // $1), applied per request by estimateRequestCost.
+  "claude-haiku-5-5": priced(0.1, 0.5, {
+    cacheRead: 0.01, cacheWrite5m: 0.125, cacheWrite1h: 0.2,
+    longContext: { overPromptTokens: 100_000, multiplier: 5 },
+  }),
 
   // $5/$25 (line 124), no documented cache-read override -> default 0.1x = $0.50.
   "claude-opus-5": priced(5, 25),
@@ -164,4 +176,26 @@ export function estimateCost(model: string, usage: UsageForCost): number | null 
       usage.cacheWrite1h * price.cacheWrite1h) /
     1_000_000;
   return Number.isFinite(cost) ? cost : null;
+}
+
+// Prices ONE request, applying the model's long-context tier when its prompt crosses the line.
+// The parsers call this per deduped request and sum the results, because a daily total cannot
+// tell one 120K prompt (5x on Haiku 5.5) from two 60K prompts (1x).
+export function estimateRequestCost(model: string, usage: UsageForCost): number | null {
+  const base = estimateCost(model, usage);
+  if (base === null) return null;
+  const tier = PRICES[normalizeModelId(model)]?.longContext;
+  const prompt = usage.input + usage.cacheRead + usage.cacheWrite5m + usage.cacheWrite1h;
+  return tier && prompt > tier.overPromptTokens ? base * tier.multiplier : base;
+}
+
+// For repricing stored daily rows, which no longer know their request sizes. A model with a
+// long-context tier returns null here, so its rows are re-parsed and priced per request instead
+// of being underpriced from the total (indexer.ts).
+export function aggregateCostForBackfill(model: string, usage: UsageForCost): number | null {
+  return hasLongContextTier(model) ? null : estimateCost(model, usage);
+}
+
+export function hasLongContextTier(model: string): boolean {
+  return !!PRICES[normalizeModelId(model)]?.longContext;
 }

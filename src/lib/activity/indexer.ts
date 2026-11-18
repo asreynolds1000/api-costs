@@ -13,7 +13,7 @@ import { backfillMissingCosts } from "@/lib/db/backfill-costs";
 import { toEasternDate } from "@/lib/timezone";
 import { createClaudeAccumulator, type ClaudeFinishResult } from "./claude-parse";
 import { createCodexAccumulator, type CodexFinishResult } from "./codex-parse";
-import { estimateCost } from "./pricing";
+import { aggregateCostForBackfill, estimateCost, estimateRequestCost, hasLongContextTier } from "./pricing";
 
 export type IndexResult = {
   filesSeen: number;
@@ -137,7 +137,7 @@ async function parseFile(entry: FileEntry): Promise<ClaudeFinishResult | CodexFi
     const subagentType = entry.isSubagent ? readSubagentType(entry.path) : undefined;
     const acc = createClaudeAccumulator({ isSubagent: entry.isSubagent, subagentType });
     await streamLines(entry.path, acc.line);
-    return acc.finish(toDate);
+    return acc.finish(toDate, estimateRequestCost); // per-request, so long-context tiers apply
   }
   const acc = createCodexAccumulator();
   await streamLines(entry.path, acc.line);
@@ -162,7 +162,8 @@ function writeFileRows(
     tx.delete(schema.activitySessions).where(eq(schema.activitySessions.path, entry.key)).run();
 
     for (const u of result.usage) {
-      const estCostUsd = estimateCost(u.model, u);
+      // Claude rows arrive priced per request; Codex rows are still priced from the daily total.
+      const estCostUsd = "estCostUsd" in u && u.estCostUsd !== undefined ? u.estCostUsd : estimateCost(u.model, u);
       tx.insert(schema.activityUsage)
         .values({
           path: entry.key,
@@ -242,6 +243,16 @@ async function runIndexActivity(opts?: IndexOptions): Promise<IndexResult> {
     existing.set(row.path, { size: row.size, mtimeMs: row.mtimeMs });
   }
 
+  // Files with an unpriced row for a model that has a long-context tier are re-parsed even when
+  // unchanged, so those rows get per-request prices. The backfill below skips such models, since a
+  // daily total would underprice them. Once priced, a row is no longer NULL and is not re-parsed.
+  const needsReprice = new Set<string>();
+  for (const row of sqlite
+    .prepare("SELECT DISTINCT path, model FROM activity_usage WHERE est_cost_usd IS NULL")
+    .all() as { path: string; model: string }[]) {
+    if (hasLongContextTier(row.model)) needsReprice.add(row.path);
+  }
+
   let filesParsed = 0;
   let rowsWritten = 0;
 
@@ -256,7 +267,7 @@ async function runIndexActivity(opts?: IndexOptions): Promise<IndexResult> {
 
     const prev = existing.get(entry.key);
     const mtime = Math.trunc(stat.mtimeMs);
-    if (prev && prev.size === stat.size && prev.mtimeMs === mtime) {
+    if (prev && prev.size === stat.size && prev.mtimeMs === mtime && !needsReprice.has(entry.key)) {
       continue; // unchanged since the last run
     }
 
@@ -274,7 +285,7 @@ async function runIndexActivity(opts?: IndexOptions): Promise<IndexResult> {
   // Reprice rows indexed before their model had a price; unchanged files were skipped above.
   let costsBackfilled = 0;
   try {
-    costsBackfilled = backfillMissingCosts(sqlite, estimateCost);
+    costsBackfilled = backfillMissingCosts(sqlite, aggregateCostForBackfill);
   } catch (err) {
     errors.push(`cost backfill: ${err instanceof Error ? err.message : String(err)}`);
   }
