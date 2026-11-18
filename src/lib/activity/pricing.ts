@@ -78,6 +78,24 @@ export const PRICES: Record<string, ModelPrice> = {
   "claude-sonnet-5": priced(2, 10),
 
   // --- OpenAI (Codex) ------------------------------------------------------------------------
+  // Rates below are from OpenAI's model pages, read 2026-11-17 (MODEL-CATALOG-REFERENCE rows of the
+  // same names). "Cache writes" is OpenAI's 30-minute retention rate, stored as cacheWrite5m. The
+  // long-context surcharge (over 272K input tokens) is not modeled.
+  // gpt-6.2-astra: $8/$40, cached $0.40, cache writes $10. Released 2026-11-17.
+  "gpt-6.2-astra": priced(8, 40, { cacheRead: 0.4, cacheWrite5m: 10 }),
+
+  // gpt-6.2-sol: $2/$10, cached $0.10, cache writes $2.50. Released 2026-11-17; the Codex default.
+  "gpt-6.2-sol": priced(2, 10, { cacheRead: 0.1, cacheWrite5m: 2.5 }),
+
+  // gpt-6.1-sol: $2/$10, cached $0.10, cache writes $2.50. The Codex default 2026-09-29 to 2026-11-17.
+  "gpt-6.1-sol": priced(2, 10, { cacheRead: 0.1, cacheWrite5m: 2.5 }),
+
+  // gpt-6.1-terra: $1/$5, cached $0.05, cache writes $1.25.
+  "gpt-6.1-terra": priced(1, 5, { cacheRead: 0.05, cacheWrite5m: 1.25 }),
+
+  // gpt-6-luna: $0.10/$0.50, cached $0.01, cache writes $0.125.
+  "gpt-6-luna": priced(0.1, 0.5, { cacheRead: 0.01, cacheWrite5m: 0.125 }),
+
   // gpt-6-astra: $10/$50, cached $1.00, cache writes $12.50 (line 155).
   "gpt-6-astra": priced(10, 50, { cacheRead: 1.0, cacheWrite5m: 12.5 }),
 

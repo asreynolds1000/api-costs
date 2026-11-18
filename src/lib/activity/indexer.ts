@@ -8,7 +8,8 @@ import { setImmediate as yieldToEventLoop } from "node:timers/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { eq } from "drizzle-orm";
-import { db, schema } from "@/lib/db";
+import { db, schema, sqlite } from "@/lib/db";
+import { backfillMissingCosts } from "@/lib/db/backfill-costs";
 import { toEasternDate } from "@/lib/timezone";
 import { createClaudeAccumulator, type ClaudeFinishResult } from "./claude-parse";
 import { createCodexAccumulator, type CodexFinishResult } from "./codex-parse";
@@ -18,6 +19,7 @@ export type IndexResult = {
   filesSeen: number;
   filesParsed: number;
   rowsWritten: number;
+  costsBackfilled: number;
   ms: number;
   errors: string[];
 };
@@ -269,7 +271,15 @@ async function runIndexActivity(opts?: IndexOptions): Promise<IndexResult> {
     await yieldToEventLoop();
   }
 
-  return { filesSeen: files.length, filesParsed, rowsWritten, ms: Date.now() - startedAt, errors };
+  // Reprice rows indexed before their model had a price; unchanged files were skipped above.
+  let costsBackfilled = 0;
+  try {
+    costsBackfilled = backfillMissingCosts(sqlite, estimateCost);
+  } catch (err) {
+    errors.push(`cost backfill: ${err instanceof Error ? err.message : String(err)}`);
+  }
+
+  return { filesSeen: files.length, filesParsed, rowsWritten, costsBackfilled, ms: Date.now() - startedAt, errors };
 }
 
 // route.ts and instrumentation.ts are separate Next.js bundles with separate module caches,
