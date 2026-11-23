@@ -1,4 +1,11 @@
-# AI Usage Dashboard
+# AI Usage Dashboard: AI API spend, plan limits and tool usage in one local page
+
+- **What:** A local dashboard that pulls billed AI API spend from OpenAI, Anthropic, xAI, Google Gemini, OpenRouter, fal.ai and BFL, shows Claude and ChatGPT Codex plan limits, and summarizes Claude Code and Codex usage from local logs. It lives at `localhost:4100`.
+- **For:** Anyone who pays for several AI APIs and wants one view of what they cost. It is a personal tool that is public so others can run their own copy. Alex Reynolds builds and maintains it. Next steps are tracked privately.
+- **Runs:** Locally as a Next.js 16 app under pm2 (`pm2 start npm --name "api-costs" -- start`), on port 4100, bound to 127.0.0.1. There is no hosted version. A change ships by pulling, running `npm run build` and `pm2 restart api-costs`. Data is in a local SQLite file. It calls each provider's billing API with your own keys, and Gemini goes through a BigQuery billing export.
+- **Status:** Live (2026-11-23). The maintainer's copy is running and `localhost:4100` returns 200. The last change was 2026-11-23 (Claude plan names now use Ultra).
+
+Working notes for agents: `AGENTS.md`.
 
 Track AI API spending across OpenAI, Anthropic, xAI/Grok, Google Gemini, OpenRouter, fal.ai and BFL, subscription limits for Claude and ChatGPT Codex, and what you actually used in Claude Code and Codex (tools, skills, subagents, models), in a single dashboard.
 
@@ -6,7 +13,7 @@ Pulls actual billed amounts from each provider's billing API. No proxies, no est
 
 ## What it does
 
-- **Plan limits** -- Claude (Pro/Max) and ChatGPT Codex as dials per window, with reset times, a pace notch and a straight-line projection ("runs out Thu 2 PM"), plus a burn-up chart of each weekly limit against even pace (needs the optional `history.jsonl` quota log in `~/.local/state/ai-usage/`)
+- **Plan limits** -- Claude (Pro, Max and Ultra) and ChatGPT Codex as dials per window, with reset times, a pace notch and a straight-line projection ("runs out Thu 2 PM"), plus a burn-up chart of each weekly limit against even pace (needs the optional `history.jsonl` quota log in `~/.local/state/ai-usage/`)
 - **Spend summary** -- this month with daily bars and the change against last month at the same point, a month-end projection, last 30 days, this week, this year
 - **Activity** -- from the Claude Code and Codex logs on this machine and a second Mac: sessions, messages, a 12-month heatmap per tool (Claude Code and Codex, each on its own scale), MCP servers (with per-tool counts), skills, subagents and built-in tools, and every model used with tokens and its cost at API list prices
 - **Auto-sync** -- the server syncs every provider, refreshes quotas and indexes local logs every 30 minutes (`AUTO_SYNC_MINUTES`, 0 turns it off); the page refreshes itself every 2 minutes
@@ -34,7 +41,7 @@ Each provider is optional. The dashboard works with any combination, including z
 ## Quick start
 
 ```bash
-git clone <repo-url> && cd api-costs
+git clone https://github.com/asreynolds1000/api-costs.git && cd api-costs
 npm install
 npx drizzle-kit push
 cp .env.example .env.local
