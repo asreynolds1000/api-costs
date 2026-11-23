@@ -126,6 +126,17 @@ test("claude: state file windows, with reset handling", () => {
   assert.equal(ws[1].updatedAt, new Date(1500 * 1000).toISOString());
 });
 
+test("claude: a window the status line stopped sending is dropped, not shown as reset", () => {
+  // Ultra has no 5-hour limit (2026-10-30); the last five_hour reading lingers in the state file
+  const state = {
+    windows: {
+      five_hour: { used_percentage: 35, resets_at: 2000, updated_at: 1500 },
+      seven_day: { used_percentage: 19, resets_at: 9000, updated_at: 3000 },
+    },
+  };
+  assert.deepEqual(claudeWindows(state, 3500).map((w) => w.label), ["Weekly"]);
+});
+
 // --- status line script ---------------------------------------------------
 
 const SCRIPT = join(import.meta.dirname, "..", "scripts", "claude-statusline.sh");

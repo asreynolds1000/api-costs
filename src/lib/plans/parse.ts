@@ -1,4 +1,4 @@
-// Pure parsing for subscription plan usage (Claude Max, ChatGPT Codex).
+// Pure parsing for subscription plan usage (Claude, ChatGPT Codex).
 // No fs or path-alias imports, so tests/plans.test.ts can load it with plain `node --test`.
 
 export type QuotaWindow = {
@@ -218,9 +218,15 @@ const CLAUDE_WINDOWS = [
 ];
 
 export function claudeWindows(state: ClaudeState, nowSec: number): QuotaWindow[] {
+  const raw = state.windows ?? {};
+  // A reading of any window taken after this one reset, with no new reading of this one, means
+  // the status line stopped sending it (Ultra has no 5-hour limit since 2026-10-30, but the
+  // state file keeps the last five_hour reading). Drop it rather than show it as reset.
+  const latest = Math.max(0, ...Object.values(raw).map((w) => w?.updated_at ?? 0));
   return CLAUDE_WINDOWS.flatMap(({ key, minutes }) => {
-    const w = state.windows?.[key];
+    const w = raw[key];
     if (!w) return [];
+    if (typeof w.resets_at === "number" && latest > w.resets_at) return [];
     return [
       applyReset(
         {

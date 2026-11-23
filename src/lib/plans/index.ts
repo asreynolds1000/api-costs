@@ -1,4 +1,4 @@
-import { getClaudeUsage } from "./claude";
+import { CLAUDE_PLAN, getClaudeUsage } from "./claude";
 import { getCodexUsage } from "./codex";
 import { withWeeklyTrends } from "./history";
 import type { PlanUsage } from "./parse";
@@ -22,7 +22,7 @@ function safely(id: PlanUsage["id"], name: string, read: () => PlanUsage): PlanU
 
 export function getPlanUsage(): PlanUsage[] {
   return withWeeklyTrends([
-    safely("claude", "Claude Max", getClaudeUsage),
+    safely("claude", CLAUDE_PLAN, getClaudeUsage),
     safely("codex", "ChatGPT Codex", getCodexUsage),
   ]);
 }

@@ -8,9 +8,9 @@ import { formatClockTime } from "@/lib/format";
 // Burn-up of each plan's weekly limit. The plans' weeks start at different times, so the
 // x axis is days into each plan's own window, which also makes one even-pace line serve both.
 
-const SERIES: Record<string, { label: string; color: string }> = {
-  claude: { label: "Claude Max", color: "var(--provider-anthropic)" },
-  codex: { label: "ChatGPT Codex", color: "var(--provider-openai)" },
+const COLORS: Record<string, string> = {
+  claude: "var(--provider-anthropic)",
+  codex: "var(--provider-openai)",
 };
 
 const DAY = 86400;
@@ -31,9 +31,9 @@ type Series = {
 
 function buildSeries(plans: PlanUsage[], nowSec: number): Series[] {
   return plans.flatMap((plan) => {
-    const meta = SERIES[plan.id];
+    const color = COLORS[plan.id];
     const raw = plan.windows.find((w) => w.windowMinutes === WEEK_DAYS * 1440);
-    if (!meta || !raw?.trend?.length) return [];
+    if (!color || !raw?.trend?.length) return [];
     const w = applyReset(raw, nowSec);
     if (w.reset || w.resetsAt === null || w.usedPercent === null) return [];
     const start = w.resetsAt - WEEK_DAYS * DAY;
@@ -44,7 +44,7 @@ function buildSeries(plans: PlanUsage[], nowSec: number): Series[] {
     const now = { day: Math.max(points.at(-1)!.day, nowDay), used: points.at(-1)!.used };
     const elapsed = now.day / WEEK_DAYS;
     const projected = elapsed >= 0.1 && now.used > 0 ? now.used / elapsed : null;
-    return [{ id: plan.id, ...meta, start, resetsAt: w.resetsAt, points, now, projected }];
+    return [{ id: plan.id, label: plan.name, color, start, resetsAt: w.resetsAt, points, now, projected }];
   });
 }
 

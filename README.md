@@ -52,7 +52,7 @@ Both sources are local files; no API keys or network calls.
 | Plan | Source | Windows |
 |------|--------|---------|
 | ChatGPT Codex | Rate-limit snapshots Codex writes to `~/.codex/sessions/**/rollout-*.jsonl` (override with `CODEX_HOME`), or a direct probe recorded to `~/.local/state/ai-usage/codex-rate-limits.json` if one exists; the newer reading wins | Whatever the plan reports, e.g. weekly, or 5-hour + weekly |
-| Claude (Pro/Max) | `scripts/claude-statusline.sh`, run as the Claude Code status line, records the `rate_limits` field to `~/.local/state/ai-usage/claude-rate-limits.json` (override with `CLAUDE_USAGE_STATE`) | 5-hour and weekly |
+| Claude (Pro/Max/Ultra) | `scripts/claude-statusline.sh`, run as the Claude Code status line, records the `rate_limits` field to `~/.local/state/ai-usage/claude-rate-limits.json` (override with `CLAUDE_USAGE_STATE`) | 5-hour and weekly; weekly only on Ultra, which has no 5-hour limit |
 
 To enable the Claude side, add to your Claude Code settings (use an absolute path, and repeat
 for each `CLAUDE_CONFIG_DIR` you use):

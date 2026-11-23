@@ -8,10 +8,13 @@ const STATE_PATH =
   process.env.CLAUDE_USAGE_STATE ??
   join(homedir(), ".local", "state", "ai-usage", "claude-rate-limits.json");
 
+// Max 20x was renamed Ultra on 2026-10-30 (Max 5x is now Max).
+export const CLAUDE_PLAN = "Claude Ultra";
+
 export function getClaudeUsage(nowSec = Date.now() / 1000): PlanUsage {
   const base = {
     id: "claude" as const,
-    name: "Claude Max",
+    name: CLAUDE_PLAN,
     windows: [],
     updatedAt: null,
     note: "The Fable weekly limit and credit balances aren't available on this Mac.",
