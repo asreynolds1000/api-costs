@@ -132,6 +132,15 @@ export type AiQuotaCodexState = {
 };
 
 export function aiQuotaCodexWindows(state: AiQuotaCodexState, nowSec: number): QuotaWindow[] {
+  return aiQuotaWindows(state, nowSec, (minutes) => `codex:${minutes}`);
+}
+
+// ai-quota writes the same shape for Claude to claude-probe.json. Keys match the status line's.
+export function aiQuotaClaudeWindows(state: AiQuotaCodexState, nowSec: number): QuotaWindow[] {
+  return aiQuotaWindows(state, nowSec, (minutes) => CLAUDE_WINDOWS.find((w) => w.minutes === minutes)?.key ?? `claude:${minutes}`);
+}
+
+function aiQuotaWindows(state: AiQuotaCodexState, nowSec: number, keyFor: (minutes: number) => string): QuotaWindow[] {
   return Object.entries(state.windows ?? {})
     .flatMap(([key, w]) => {
       const minutes = Number(key);
@@ -141,7 +150,7 @@ export function aiQuotaCodexWindows(state: AiQuotaCodexState, nowSec: number): Q
       return [
         applyReset(
           {
-            key: `codex:${minutes}`,
+            key: keyFor(minutes),
             label: windowLabel(minutes),
             windowMinutes: minutes,
             usedPercent: used,
@@ -243,4 +252,20 @@ export function claudeWindows(state: ClaudeState, nowSec: number): QuotaWindow[]
       ),
     ];
   });
+}
+
+// The status line writes only while a terminal Claude Code session is open; ai-quota's probe runs
+// on its own schedule. Each window takes the newer of the two readings. As in claudeWindows, a
+// window that reset before any other window's latest reading is no longer being sent.
+export function mergeClaudeWindows(...sources: QuotaWindow[][]): QuotaWindow[] {
+  const byLength = new Map<number, QuotaWindow>();
+  for (const w of sources.flat()) {
+    const held = byLength.get(w.windowMinutes);
+    if (!held || (w.updatedAt ?? "") > (held.updatedAt ?? "")) byLength.set(w.windowMinutes, w);
+  }
+  const merged = [...byLength.values()];
+  const latest = newestUpdate(merged);
+  return merged
+    .filter((w) => !(latest && w.resetsAt !== null && Date.parse(latest) / 1000 > w.resetsAt))
+    .sort((a, b) => a.windowMinutes - b.windowMinutes);
 }
