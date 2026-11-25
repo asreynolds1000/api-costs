@@ -132,6 +132,15 @@ export type AiQuotaCodexState = {
 };
 
 export function aiQuotaCodexWindows(state: AiQuotaCodexState, nowSec: number): QuotaWindow[] {
+  return aiQuotaWindows(state, nowSec, (minutes) => `codex:${minutes}`);
+}
+
+// ai-quota writes the same shape for Claude to claude-probe.json. Keys match the status line's.
+export function aiQuotaClaudeWindows(state: AiQuotaCodexState, nowSec: number): QuotaWindow[] {
+  return aiQuotaWindows(state, nowSec, (minutes) => CLAUDE_WINDOWS.find((w) => w.minutes === minutes)?.key ?? `claude:${minutes}`);
+}
+
+function aiQuotaWindows(state: AiQuotaCodexState, nowSec: number, keyFor: (minutes: number) => string): QuotaWindow[] {
   return Object.entries(state.windows ?? {})
     .flatMap(([key, w]) => {
       const minutes = Number(key);
@@ -141,7 +150,7 @@ export function aiQuotaCodexWindows(state: AiQuotaCodexState, nowSec: number): Q
       return [
         applyReset(
           {
-            key: `codex:${minutes}`,
+            key: keyFor(minutes),
             label: windowLabel(minutes),
             windowMinutes: minutes,
             usedPercent: used,
@@ -243,4 +252,33 @@ export function claudeWindows(state: ClaudeState, nowSec: number): QuotaWindow[]
       ),
     ];
   });
+}
+
+// The status line writes only while a session refreshes it; ai-quota's probe runs on its own
+// schedule. Each window keeps one reading, by the rule scripts/claude-statusline.sh merges with:
+// the later reset wins, then the higher reading (usage only rises inside a window, and an idle
+// session can re-send an old percentage under a fresh timestamp), then the newer one. As in
+// claudeWindows, a window that reset before any other window's latest reading is no longer sent.
+function preferredReading(a: QuotaWindow, b: QuotaWindow): QuotaWindow {
+  const newer = (a.updatedAt ?? "") >= (b.updatedAt ?? "") ? a : b;
+  if (a.resetsAt === null || b.resetsAt === null) return newer;
+  if (Math.abs(a.resetsAt - b.resetsAt) > 3600) return a.resetsAt > b.resetsAt ? a : b;
+  const ua = a.usedPercent ?? -1;
+  const ub = b.usedPercent ?? -1;
+  return ua === ub ? newer : ua > ub ? a : b;
+}
+
+export function mergeClaudeWindows(...sources: QuotaWindow[][]): QuotaWindow[] {
+  const byLength = new Map<number, QuotaWindow>();
+  for (const w of sources.flat()) {
+    const held = byLength.get(w.windowMinutes);
+    byLength.set(w.windowMinutes, held ? preferredReading(held, w) : w);
+  }
+  const all = sources.flat();
+  return [...byLength.values()]
+    .filter((w) => {
+      const other = newestUpdate(all.filter((o) => o.windowMinutes !== w.windowMinutes));
+      return !(other && w.resetsAt !== null && Date.parse(other) / 1000 > w.resetsAt);
+    })
+    .sort((a, b) => a.windowMinutes - b.windowMinutes);
 }

@@ -6,7 +6,9 @@ import { mkdtempSync, readFileSync, writeFileSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
+  aiQuotaClaudeWindows,
   aiQuotaCodexWindows,
+  mergeClaudeWindows,
   windowTrend,
   findLatestCodexSnapshot,
   codexWindows,
@@ -135,6 +137,58 @@ test("claude: a window the status line stopped sending is dropped, not shown as 
     },
   };
   assert.deepEqual(claudeWindows(state, 3500).map((w) => w.label), ["Weekly"]);
+});
+
+// Shape ai-quota writes to claude-probe.json (2026-11), trimmed.
+test("claude: ai-quota probe windows use the status line's keys, rejected counts as 100%", () => {
+  const probe = {
+    last_ok: 3000,
+    windows: {
+      "10080": { observed_at: 3000, rejected: false, resets_at: 9000, used_percentage: 62.0 },
+      "300": { observed_at: 3000, rejected: true, resets_at: 4000, used_percentage: 10.0 },
+    },
+  };
+  const ws = aiQuotaClaudeWindows(probe, 3500);
+  assert.deepEqual(ws.map((w) => [w.key, w.usedPercent]), [["five_hour", 100], ["seven_day", 62]]);
+  assert.equal(ws[1].updatedAt, new Date(3000 * 1000).toISOString());
+});
+
+test("claude: the newer reading of each window wins across the status line and the probe", () => {
+  // 2026-11-25: the status line last wrote 34% the day before; the probe read 62% that morning
+  const statusLine = claudeWindows({ windows: { seven_day: { used_percentage: 34, resets_at: 9000, updated_at: 1500 } } }, 3500);
+  const probe = aiQuotaClaudeWindows({ windows: { "10080": { observed_at: 3000, resets_at: 9000, used_percentage: 62 } } }, 3500);
+  assert.deepEqual(mergeClaudeWindows(statusLine, probe).map((w) => w.usedPercent), [62]);
+  assert.deepEqual(mergeClaudeWindows(probe, statusLine).map((w) => w.usedPercent), [62]);
+
+  // Newer status line beats an older probe
+  const freshLine = claudeWindows({ windows: { seven_day: { used_percentage: 70, resets_at: 9000, updated_at: 3200 } } }, 3500);
+  assert.deepEqual(mergeClaudeWindows(freshLine, probe).map((w) => w.usedPercent), [70]);
+
+  // An idle session re-sending an old 40% under a fresh timestamp does not hide the probe's 95%
+  const replay = claudeWindows({ windows: { seven_day: { used_percentage: 40, resets_at: 9000, updated_at: 3400 } } }, 3500);
+  const highProbe = aiQuotaClaudeWindows({ windows: { "10080": { observed_at: 3000, resets_at: 9000, used_percentage: 95 } } }, 3500);
+  assert.deepEqual(mergeClaudeWindows(replay, highProbe).map((w) => w.usedPercent), [95]);
+  assert.deepEqual(mergeClaudeWindows(highProbe, replay).map((w) => w.usedPercent), [95]);
+
+  // A reading from the next window wins over a higher one from the window before it
+  const nextWeek = aiQuotaClaudeWindows({ windows: { "10080": { observed_at: 3000, resets_at: 9000 + 604800, used_percentage: 5 } } }, 3500);
+  assert.deepEqual(mergeClaudeWindows(highProbe, nextWeek).map((w) => w.usedPercent), [5]);
+  assert.deepEqual(mergeClaudeWindows(nextWeek, highProbe).map((w) => w.usedPercent), [5]);
+
+  // A window only one source has is kept; one that reset before another window's newer reading is dropped
+  const fiveHour = claudeWindows({ windows: { five_hour: { used_percentage: 20, resets_at: 4000, updated_at: 3100 } } }, 3500);
+  assert.deepEqual(mergeClaudeWindows(fiveHour, probe).map((w) => w.label), ["5-hour", "Weekly"]);
+  const staleFiveHour = claudeWindows({ windows: { five_hour: { used_percentage: 20, resets_at: 2000, updated_at: 1500 } } }, 3500);
+  assert.deepEqual(mergeClaudeWindows(staleFiveHour, probe).map((w) => w.label), ["Weekly"]);
+  assert.deepEqual(mergeClaudeWindows([], []), []);
+
+  // A window's own reading never drops it, even one taken after its reported reset
+  const lateOwn = aiQuotaClaudeWindows({ windows: { "10080": { observed_at: 3000, resets_at: 2000, used_percentage: 62 } } }, 1000);
+  assert.deepEqual(mergeClaudeWindows(lateOwn).map((w) => w.usedPercent), [62]);
+
+  // A losing reading still counts as evidence that an expired window stopped being sent
+  const probeFiveHour = aiQuotaClaudeWindows({ windows: { "300": { observed_at: 3000, resets_at: 3300, used_percentage: 20 } } }, 3500);
+  assert.deepEqual(mergeClaudeWindows(replay, [...highProbe, ...probeFiveHour]).map((w) => w.label), ["Weekly"]);
 });
 
 // --- status line script ---------------------------------------------------
