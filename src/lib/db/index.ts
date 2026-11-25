@@ -3,6 +3,8 @@ import { drizzle } from "drizzle-orm/better-sqlite3";
 import { join } from "path";
 import * as schema from "./schema";
 import { collapseNullDedupKeys } from "./migrate-dedup";
+import { rekeyOpenAIRows } from "./rekey-openai";
+import { parseLineItem } from "../providers/openai-parse";
 
 const DB_PATH = process.env.DATABASE_PATH || join(process.cwd(), "data", "costs.sqlite");
 
@@ -17,6 +19,9 @@ function getDatabase() {
     // busy_timeout prevents SQLITE_BUSY during build (multiple workers)
     sqlite.pragma("busy_timeout = 5000");
     collapseNullDedupKeys(sqlite);
+    // Not during `next build`: build workers open the live database while the old server still
+    // syncs with the old parser. The new server re-keys at start, before its first sync.
+    if (process.env.NEXT_PHASE !== "phase-production-build") rekeyOpenAIRows(sqlite, parseLineItem);
     globalForDb.__db = sqlite;
   }
   return globalForDb.__db;
