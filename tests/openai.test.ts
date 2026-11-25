@@ -2,6 +2,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import Database from "better-sqlite3";
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { parseLineItem } from "../src/lib/providers/openai-parse.ts";
 import { rekeyOpenAIRows } from "../src/lib/db/rekey-openai.ts";
 
@@ -97,4 +100,44 @@ test("rekey: when a sync already stored the new key, the newest copy is kept, no
 
 test("rekey: no cost_entries table is a no-op", () => {
   assert.deepEqual(rekeyOpenAIRows(new Database(":memory:"), parseLineItem), { rekeyed: 0, removed: 0 });
+});
+
+// Codex review 2026-11-25 reproduced this with two workers: one planned from a snapshot taken
+// before the other's write, each deleted the copy the other kept, and the charge was gone.
+test("rekey: a second connection writing mid-plan cannot make both copies disappear", () => {
+  const path = join(mkdtempSync(join(tmpdir(), "rekey-")), "costs.sqlite");
+  const setup = new Database(path);
+  setup.pragma("journal_mode = WAL");
+  setup.exec(`CREATE TABLE cost_entries (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, provider TEXT NOT NULL, model TEXT NOT NULL, date TEXT NOT NULL,
+    cost_usd REAL NOT NULL, unit_type TEXT, direction TEXT, raw_line_item TEXT, source TEXT NOT NULL, synced_at TEXT NOT NULL);
+    CREATE UNIQUE INDEX cost_entries_dedup ON cost_entries (provider, model, date, direction, raw_line_item, source);`);
+  const raw = "gpt-6.1-sol, cache writes";
+  const add = setup.prepare("INSERT INTO cost_entries VALUES (?, 'openai', ?, '2026-11-15', ?, ?, ?, ?, 'api_sync', ?)");
+  add.run(1, raw, 0.02, "unknown", "total", raw, "2026-11-25T13:00:00Z"); // old key, older sync
+  add.run(2, "gpt-6.1-sol", 0.03, "tokens", "input", raw, "2026-11-25T14:00:00Z"); // new key, newer sync
+  setup.close();
+
+  const a = new Database(path);
+  const b = new Database(path);
+  b.pragma("busy_timeout = 0");
+  let blocked = 0;
+  let stamp = 15;
+  // On every parse step of A, B makes the old-key copy the newest and runs its own re-key
+  const interleaved = (line: string) => {
+    try {
+      b.prepare("UPDATE cost_entries SET synced_at = ? WHERE id = 1").run(`2026-11-25T${stamp++}:00:00Z`);
+      rekeyOpenAIRows(b, parseLineItem);
+    } catch (err) {
+      if ((err as { code?: string }).code !== "SQLITE_BUSY") throw err;
+      blocked++;
+    }
+    return parseLineItem(line);
+  };
+  rekeyOpenAIRows(a, interleaved);
+  const n = (a.prepare("SELECT count(*) AS n FROM cost_entries").get() as { n: number }).n;
+  a.close();
+  b.close();
+  assert.equal(n, 1);
+  assert.ok(blocked > 0, "B was never blocked: A did not hold the write lock while planning");
 });

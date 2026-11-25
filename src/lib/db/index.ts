@@ -19,7 +19,9 @@ function getDatabase() {
     // busy_timeout prevents SQLITE_BUSY during build (multiple workers)
     sqlite.pragma("busy_timeout = 5000");
     collapseNullDedupKeys(sqlite);
-    rekeyOpenAIRows(sqlite, parseLineItem);
+    // Not during `next build`: build workers open the live database while the old server still
+    // syncs with the old parser. The new server re-keys at start, before its first sync.
+    if (process.env.NEXT_PHASE !== "phase-production-build") rekeyOpenAIRows(sqlite, parseLineItem);
     globalForDb.__db = sqlite;
   }
   return globalForDb.__db;
