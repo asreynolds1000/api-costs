@@ -1,30 +1,6 @@
 import type { ProviderAdapter, CostEntry } from "./types";
 import { toEasternDate } from "../timezone";
-
-// Parse OpenAI line_item strings like "gpt-4o, input" or "Image models"
-function parseLineItem(lineItem: string): { model: string; direction: string; unitType: string } {
-  // Common format: "model-name, input" or "model-name, output" or "model-name, cached input"
-  const commaMatch = lineItem.match(/^(.+),\s*(cached input|input|output|input audio|output audio)$/i);
-  if (commaMatch) {
-    return {
-      model: commaMatch[1].trim(),
-      direction: commaMatch[2].toLowerCase().includes("input") ? "input" : "output",
-      unitType: "tokens",
-    };
-  }
-
-  // Category-level items like "Image models", "Audio models"
-  if (/image/i.test(lineItem)) {
-    return { model: lineItem, direction: "total", unitType: "images" };
-  }
-  if (/audio/i.test(lineItem)) {
-    return { model: lineItem, direction: "total", unitType: "flat" };
-  }
-
-  // Fallback: store the raw string as the model name
-  console.warn(`[openai] Unrecognized line_item format: "${lineItem}"`);
-  return { model: lineItem, direction: "total", unitType: "unknown" };
-}
+import { parseLineItem } from "./openai-parse";
 
 type OpenAICostBucket = {
   start_time: number;
