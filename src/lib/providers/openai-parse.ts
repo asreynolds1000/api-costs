@@ -7,7 +7,7 @@ const TOKEN_LINE = /^(.+?),\s*(cached input|input audio|output audio|input|outpu
 
 // Parse OpenAI line_item strings like "gpt-4o, input" or "Image models".
 // A change here changes the model and direction stored for a line, and both are part of the
-// cost_entries dedup key: re-key the rows already stored (see scripts/reparse-openai.mts).
+// cost_entries dedup key: rows already stored are re-keyed when the database opens (src/lib/db/rekey-openai.ts).
 export function parseLineItem(lineItem: string): ParsedLineItem {
   const token = lineItem.match(TOKEN_LINE);
   if (token) {
