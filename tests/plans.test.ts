@@ -164,6 +164,17 @@ test("claude: the newer reading of each window wins across the status line and t
   const freshLine = claudeWindows({ windows: { seven_day: { used_percentage: 70, resets_at: 9000, updated_at: 3200 } } }, 3500);
   assert.deepEqual(mergeClaudeWindows(freshLine, probe).map((w) => w.usedPercent), [70]);
 
+  // An idle session re-sending an old 40% under a fresh timestamp does not hide the probe's 95%
+  const replay = claudeWindows({ windows: { seven_day: { used_percentage: 40, resets_at: 9000, updated_at: 3400 } } }, 3500);
+  const highProbe = aiQuotaClaudeWindows({ windows: { "10080": { observed_at: 3000, resets_at: 9000, used_percentage: 95 } } }, 3500);
+  assert.deepEqual(mergeClaudeWindows(replay, highProbe).map((w) => w.usedPercent), [95]);
+  assert.deepEqual(mergeClaudeWindows(highProbe, replay).map((w) => w.usedPercent), [95]);
+
+  // A reading from the next window wins over a higher one from the window before it
+  const nextWeek = aiQuotaClaudeWindows({ windows: { "10080": { observed_at: 3000, resets_at: 9000 + 604800, used_percentage: 5 } } }, 3500);
+  assert.deepEqual(mergeClaudeWindows(highProbe, nextWeek).map((w) => w.usedPercent), [5]);
+  assert.deepEqual(mergeClaudeWindows(nextWeek, highProbe).map((w) => w.usedPercent), [5]);
+
   // A window only one source has is kept; one that reset before another window's newer reading is dropped
   const fiveHour = claudeWindows({ windows: { five_hour: { used_percentage: 20, resets_at: 4000, updated_at: 3100 } } }, 3500);
   assert.deepEqual(mergeClaudeWindows(fiveHour, probe).map((w) => w.label), ["5-hour", "Weekly"]);
