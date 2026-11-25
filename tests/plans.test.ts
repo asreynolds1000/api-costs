@@ -181,6 +181,14 @@ test("claude: the newer reading of each window wins across the status line and t
   const staleFiveHour = claudeWindows({ windows: { five_hour: { used_percentage: 20, resets_at: 2000, updated_at: 1500 } } }, 3500);
   assert.deepEqual(mergeClaudeWindows(staleFiveHour, probe).map((w) => w.label), ["Weekly"]);
   assert.deepEqual(mergeClaudeWindows([], []), []);
+
+  // A window's own reading never drops it, even one taken after its reported reset
+  const lateOwn = aiQuotaClaudeWindows({ windows: { "10080": { observed_at: 3000, resets_at: 2000, used_percentage: 62 } } }, 1000);
+  assert.deepEqual(mergeClaudeWindows(lateOwn).map((w) => w.usedPercent), [62]);
+
+  // A losing reading still counts as evidence that an expired window stopped being sent
+  const probeFiveHour = aiQuotaClaudeWindows({ windows: { "300": { observed_at: 3000, resets_at: 3300, used_percentage: 20 } } }, 3500);
+  assert.deepEqual(mergeClaudeWindows(replay, [...highProbe, ...probeFiveHour]).map((w) => w.label), ["Weekly"]);
 });
 
 // --- status line script ---------------------------------------------------

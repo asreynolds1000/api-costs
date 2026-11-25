@@ -274,9 +274,11 @@ export function mergeClaudeWindows(...sources: QuotaWindow[][]): QuotaWindow[] {
     const held = byLength.get(w.windowMinutes);
     byLength.set(w.windowMinutes, held ? preferredReading(held, w) : w);
   }
-  const merged = [...byLength.values()];
-  const latest = newestUpdate(merged);
-  return merged
-    .filter((w) => !(latest && w.resetsAt !== null && Date.parse(latest) / 1000 > w.resetsAt))
+  const all = sources.flat();
+  return [...byLength.values()]
+    .filter((w) => {
+      const other = newestUpdate(all.filter((o) => o.windowMinutes !== w.windowMinutes));
+      return !(other && w.resetsAt !== null && Date.parse(other) / 1000 > w.resetsAt);
+    })
     .sort((a, b) => a.windowMinutes - b.windowMinutes);
 }
